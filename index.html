@@ -3,17 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Person Location Directory</title>
-    
-    <!-- Leaflet CSS (Open-source map library) -->
+    <title>Community Locator Map</title>
+
+    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    
-    <!-- Font Awesome Icons -->
+
+    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
-    
+
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    
+
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -21,16 +21,33 @@
     <!-- ========== HEADER ========== -->
     <header class="header">
         <div class="header-left">
-            <i class="fas fa-map-marker-alt logo-icon"></i>
-            <h1>Person Locator</h1>
+            <i class="fas fa-city logo-icon"></i>
+            <div>
+                <h1>Community Locator</h1>
+                <span class="header-subtitle">Household & Resident Directory</span>
+            </div>
+        </div>
+        <div class="header-center">
+            <div class="stat-pill">
+                <i class="fas fa-home"></i>
+                <span id="totalHouses">0</span> Houses
+            </div>
+            <div class="stat-pill">
+                <i class="fas fa-users"></i>
+                <span id="totalResidents">0</span> Residents
+            </div>
+            <div class="stat-pill">
+                <i class="fas fa-street-view"></i>
+                <span id="totalStreets">0</span> Streets
+            </div>
         </div>
         <div class="header-right">
             <div class="search-box">
                 <i class="fas fa-search"></i>
-                <input type="text" id="searchInput" placeholder="Search people...">
+                <input type="text" id="searchInput" placeholder="Search house, resident, street...">
             </div>
-            <button class="btn btn-primary" id="addPersonBtn">
-                <i class="fas fa-plus"></i> Add Person
+            <button class="btn btn-primary" id="addHouseBtn">
+                <i class="fas fa-plus"></i> Add Household
             </button>
         </div>
     </header>
@@ -41,159 +58,481 @@
         <!-- SIDEBAR -->
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <h2><i class="fas fa-users"></i> People Directory</h2>
-                <span class="person-count" id="personCount">0 people</span>
+                <h2><i class="fas fa-house-user"></i> Households</h2>
+                <span class="house-count" id="houseCount">0 households</span>
             </div>
+
+            <!-- Filters -->
             <div class="sidebar-filters">
-                <select id="filterCategory">
-                    <option value="all">All Categories</option>
-                    <option value="family">Family</option>
-                    <option value="friend">Friend</option>
-                    <option value="colleague">Colleague</option>
-                    <option value="client">Client</option>
-                    <option value="other">Other</option>
+                <select id="filterStatus">
+                    <option value="all">All Status</option>
+                    <option value="owner">Owner Occupied</option>
+                    <option value="renter">Renter</option>
+                    <option value="vacant">Vacant</option>
+                    <option value="business">Business</option>
+                </select>
+                <select id="filterStreet">
+                    <option value="all">All Streets</option>
                 </select>
             </div>
-            <div class="person-list" id="personList">
-                <!-- Person cards will be injected here -->
+
+            <!-- Summary Cards -->
+            <div class="summary-strip">
+                <div class="summary-card" style="border-left: 4px solid #4F46E5;">
+                    <span class="summary-num" id="ownerCount">0</span>
+                    <span class="summary-label">Owners</span>
+                </div>
+                <div class="summary-card" style="border-left: 4px solid #10B981;">
+                    <span class="summary-num" id="renterCount">0</span>
+                    <span class="summary-label">Renters</span>
+                </div>
+                <div class="summary-card" style="border-left: 4px solid #F59E0B;">
+                    <span class="summary-num" id="vacantCount">0</span>
+                    <span class="summary-label">Vacant</span>
+                </div>
+                <div class="summary-card" style="border-left: 4px solid #EC4899;">
+                    <span class="summary-num" id="businessCount">0</span>
+                    <span class="summary-label">Business</span>
+                </div>
+            </div>
+
+            <!-- House List -->
+            <div class="house-list" id="houseList">
                 <div class="empty-state" id="emptyState">
-                    <i class="fas fa-user-plus"></i>
-                    <p>No people added yet.</p>
-                    <p>Click on the map or use the "Add Person" button to get started.</p>
+                    <i class="fas fa-home"></i>
+                    <p>No households recorded yet.</p>
+                    <p>Click on the map or use "Add Household" to get started.</p>
                 </div>
             </div>
         </aside>
 
-        <!-- MAP CONTAINER -->
+        <!-- MAP -->
         <div class="map-wrapper">
             <div id="map"></div>
             <div class="map-instructions" id="mapInstructions">
                 <i class="fas fa-info-circle"></i>
-                Click anywhere on the map to add a person at that location
+                Click anywhere on the map to register a household at that location
+            </div>
+
+            <!-- Map Legend -->
+            <div class="map-legend">
+                <div class="legend-title">Legend</div>
+                <div class="legend-item"><span class="legend-dot" style="background:#4F46E5"></span> Owner</div>
+                <div class="legend-item"><span class="legend-dot" style="background:#10B981"></span> Renter</div>
+                <div class="legend-item"><span class="legend-dot" style="background:#F59E0B"></span> Vacant</div>
+                <div class="legend-item"><span class="legend-dot" style="background:#EC4899"></span> Business</div>
             </div>
         </div>
     </div>
 
-    <!-- ========== ADD/EDIT PERSON MODAL ========== -->
+    <!-- ========== ADD/EDIT HOUSEHOLD MODAL ========== -->
     <div class="modal-overlay" id="modalOverlay">
-        <div class="modal" id="personModal">
+        <div class="modal" id="houseModal">
             <div class="modal-header">
-                <h2 id="modalTitle"><i class="fas fa-user-plus"></i> Add New Person</h2>
+                <h2 id="modalTitle"><i class="fas fa-home"></i> Register Household</h2>
                 <button class="modal-close" id="modalClose">&times;</button>
             </div>
-            <form id="personForm">
+
+            <div class="modal-tabs">
+                <button class="tab-btn active" data-tab="house">
+                    <i class="fas fa-home"></i> House Info
+                </button>
+                <button class="tab-btn" data-tab="residents">
+                    <i class="fas fa-users"></i> Residents
+                </button>
+                <button class="tab-btn" data-tab="location">
+                    <i class="fas fa-map-pin"></i> Location
+                </button>
+                <button class="tab-btn" data-tab="others">
+                    <i class="fas fa-clipboard-list"></i> Others
+                </button>
+            </div>
+
+            <form id="houseForm">
                 <div class="modal-body">
-                    <!-- Photo Upload -->
-                    <div class="photo-upload">
-                        <div class="photo-preview" id="photoPreview">
-                            <i class="fas fa-user"></i>
+
+                    <!-- TAB 1: HOUSE INFO -->
+                    <div class="tab-content active" id="tab-house">
+                        <div class="form-section">
+                            <h3><i class="fas fa-door-open"></i> House Identification</h3>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="houseNumber">House / Unit Number *</label>
+                                    <input type="text" id="houseNumber" required placeholder="e.g. 123, Unit 4B">
+                                </div>
+                                <div class="form-group">
+                                    <label for="houseLot">Lot Number</label>
+                                    <input type="text" id="houseLot" placeholder="e.g. Lot 7">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="houseBlock">Block Number</label>
+                                    <input type="text" id="houseBlock" placeholder="e.g. Block 2">
+                                </div>
+                                <div class="form-group">
+                                    <label for="houseStreet">Street Name *</label>
+                                    <input type="text" id="houseStreet" required placeholder="e.g. Mabini St.">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="houseBarangay">Barangay / District</label>
+                                    <input type="text" id="houseBarangay" placeholder="e.g. Barangay 1">
+                                </div>
+                                <div class="form-group">
+                                    <label for="houseMunicipality">Municipality / City</label>
+                                    <input type="text" id="houseMunicipality" placeholder="e.g. Quezon City">
+                                </div>
+                            </div>
                         </div>
-                        <label for="photoInput" class="btn btn-secondary btn-sm">
-                            <i class="fas fa-camera"></i> Upload Photo
-                        </label>
-                        <input type="file" id="photoInput" accept="image/*" hidden>
+
+                        <div class="form-section">
+                            <h3><i class="fas fa-building"></i> House Details</h3>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="houseType">House Type</label>
+                                    <select id="houseType">
+                                        <option value="single">Single Family</option>
+                                        <option value="duplex">Duplex</option>
+                                        <option value="apartment">Apartment / Condo</option>
+                                        <option value="townhouse">Townhouse</option>
+                                        <option value="bungalow">Bungalow</option>
+                                        <option value="commercial">Commercial / Business</option>
+                                        <option value="other">Other</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="houseStatus">Occupancy Status *</label>
+                                    <select id="houseStatus" required>
+                                        <option value="owner">Owner Occupied</option>
+                                        <option value="renter">Renter / Tenant</option>
+                                        <option value="vacant">Vacant</option>
+                                        <option value="business">Business</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="yearBuilt">Year Built</label>
+                                    <input type="number" id="yearBuilt" placeholder="e.g. 1998" min="1800" max="2100">
+                                </div>
+                                <div class="form-group">
+                                    <label for="houseColor">House Color</label>
+                                    <input type="text" id="houseColor" placeholder="e.g. White with blue trim">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="floorCount">Number of Floors</label>
+                                    <input type="number" id="floorCount" placeholder="e.g. 2" min="1" max="100">
+                                </div>
+                                <div class="form-group">
+                                    <label for="roomCount">Number of Rooms</label>
+                                    <input type="number" id="roomCount" placeholder="e.g. 4" min="1">
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
-                    <!-- Personal Information -->
-                    <div class="form-section">
-                        <h3><i class="fas fa-id-card"></i> Personal Information</h3>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="firstName">First Name *</label>
-                                <input type="text" id="firstName" required placeholder="John">
+                    <!-- TAB 2: RESIDENTS -->
+                    <div class="tab-content" id="tab-residents">
+
+                        <!-- Household Head -->
+                        <div class="form-section">
+                            <h3><i class="fas fa-user-tie"></i> Household Head</h3>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="headFirstName">First Name *</label>
+                                    <input type="text" id="headFirstName" required placeholder="Juan">
+                                </div>
+                                <div class="form-group">
+                                    <label for="headLastName">Last Name *</label>
+                                    <input type="text" id="headLastName" required placeholder="Dela Cruz">
+                                </div>
                             </div>
-                            <div class="form-group">
-                                <label for="lastName">Last Name *</label>
-                                <input type="text" id="lastName" required placeholder="Doe">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="headAge">Age</label>
+                                    <input type="number" id="headAge" placeholder="45" min="0" max="150">
+                                </div>
+                                <div class="form-group">
+                                    <label for="headGender">Gender</label>
+                                    <select id="headGender">
+                                        <option value="male">Male</option>
+                                        <option value="female">Female</option>
+                                        <option value="other">Other</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="headCivilStatus">Civil Status</label>
+                                    <select id="headCivilStatus">
+                                        <option value="married">Married</option>
+                                        <option value="single">Single</option>
+                                        <option value="widowed">Widowed</option>
+                                        <option value="separated">Separated</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="headOccupation">Occupation</label>
+                                    <input type="text" id="headOccupation" placeholder="e.g. Farmer, Teacher">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="headContact">Contact Number</label>
+                                    <input type="tel" id="headContact" placeholder="+63 912 345 6789">
+                                </div>
+                                <div class="form-group">
+                                    <label for="headEmail">Email (optional)</label>
+                                    <input type="email" id="headEmail" placeholder="juan@example.com">
+                                </div>
                             </div>
                         </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="email">Email</label>
-                                <input type="email" id="email" placeholder="john@example.com">
+
+                        <!-- Household Members -->
+                        <div class="form-section">
+                            <h3>
+                                <i class="fas fa-users"></i> Household Members
+                                <button type="button" class="btn btn-primary btn-sm" id="addMemberBtn" style="margin-left:auto">
+                                    <i class="fas fa-plus"></i> Add Member
+                                </button>
+                            </h3>
+
+                            <div class="members-summary-row">
+                                <div class="member-stat">
+                                    <input type="number" id="totalPersons" min="1" placeholder="0">
+                                    <label>Total Persons</label>
+                                </div>
+                                <div class="member-stat">
+                                    <input type="number" id="totalMale" min="0" placeholder="0">
+                                    <label>Male</label>
+                                </div>
+                                <div class="member-stat">
+                                    <input type="number" id="totalFemale" min="0" placeholder="0">
+                                    <label>Female</label>
+                                </div>
+                                <div class="member-stat">
+                                    <input type="number" id="totalMinors" min="0" placeholder="0">
+                                    <label>Minors (0-17)</label>
+                                </div>
+                                <div class="member-stat">
+                                    <input type="number" id="totalSenior" min="0" placeholder="0">
+                                    <label>Senior (60+)</label>
+                                </div>
+                                <div class="member-stat">
+                                    <input type="number" id="totalPwd" min="0" placeholder="0">
+                                    <label>PWD</label>
+                                </div>
                             </div>
-                            <div class="form-group">
-                                <label for="phone">Phone</label>
-                                <input type="tel" id="phone" placeholder="+1 234 567 890">
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="category">Category</label>
-                                <select id="category">
-                                    <option value="friend">Friend</option>
-                                    <option value="family">Family</option>
-                                    <option value="colleague">Colleague</option>
-                                    <option value="client">Client</option>
-                                    <option value="other">Other</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label for="age">Age</label>
-                                <input type="number" id="age" placeholder="25" min="0" max="150">
+
+                            <!-- Individual Member List -->
+                            <div id="membersList" class="members-list">
+                                <!-- Members added dynamically -->
                             </div>
                         </div>
                     </div>
 
-                    <!-- Location Information -->
-                    <div class="form-section">
-                        <h3><i class="fas fa-map-pin"></i> Location</h3>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="latitude">Latitude *</label>
-                                <input type="number" id="latitude" step="any" required placeholder="40.7128">
+                    <!-- TAB 3: LOCATION -->
+                    <div class="tab-content" id="tab-location">
+                        <div class="form-section">
+                            <h3><i class="fas fa-map-marker-alt"></i> GPS Coordinates</h3>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="latitude">Latitude *</label>
+                                    <input type="number" id="latitude" step="any" required placeholder="14.5995">
+                                </div>
+                                <div class="form-group">
+                                    <label for="longitude">Longitude *</label>
+                                    <input type="number" id="longitude" step="any" required placeholder="120.9842">
+                                </div>
                             </div>
                             <div class="form-group">
-                                <label for="longitude">Longitude *</label>
-                                <input type="number" id="longitude" step="any" required placeholder="-74.0060">
+                                <label for="fullAddress">Full Address</label>
+                                <input type="text" id="fullAddress" placeholder="Auto-filled from map click...">
+                            </div>
+                            <div class="form-group">
+                                <label for="landmark">Nearest Landmark</label>
+                                <input type="text" id="landmark" placeholder="e.g. Near the church, beside the market">
+                            </div>
+                            <button type="button" class="btn btn-secondary btn-sm" id="useCurrentLocation">
+                                <i class="fas fa-crosshairs"></i> Use My Current Location
+                            </button>
+                        </div>
+
+                        <div class="form-section">
+                            <h3><i class="fas fa-map"></i> Zone / Purok</h3>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="zone">Zone / Purok</label>
+                                    <input type="text" id="zone" placeholder="e.g. Zone 1, Purok Narra">
+                                </div>
+                                <div class="form-group">
+                                    <label for="precinct">Precinct Number</label>
+                                    <input type="text" id="precinct" placeholder="e.g. Precinct 001A">
+                                </div>
                             </div>
                         </div>
-                        <div class="form-group">
-                            <label for="address">Address</label>
-                            <input type="text" id="address" placeholder="123 Main St, City, Country">
-                        </div>
-                        <button type="button" class="btn btn-secondary btn-sm" id="useCurrentLocation">
-                            <i class="fas fa-crosshairs"></i> Use My Current Location
-                        </button>
                     </div>
 
-                    <!-- Additional Notes -->
-                    <div class="form-section">
-                        <h3><i class="fas fa-sticky-note"></i> Additional Notes</h3>
-                        <div class="form-group">
-                            <textarea id="notes" rows="3" placeholder="Any additional information..."></textarea>
+                    <!-- TAB 4: OTHER INFO -->
+                    <div class="tab-content" id="tab-others">
+                        <div class="form-section">
+                            <h3><i class="fas fa-hand-holding-heart"></i> Social & Economic</h3>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="incomeClass">Income Classification</label>
+                                    <select id="incomeClass">
+                                        <option value="">Select...</option>
+                                        <option value="4ps">4Ps Beneficiary</option>
+                                        <option value="low">Low Income</option>
+                                        <option value="middle">Middle Income</option>
+                                        <option value="high">High Income</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="waterSource">Water Source</label>
+                                    <select id="waterSource">
+                                        <option value="">Select...</option>
+                                        <option value="piped">Piped Water (LWUA)</option>
+                                        <option value="well">Deep Well</option>
+                                        <option value="spring">Spring</option>
+                                        <option value="rain">Rainwater</option>
+                                        <option value="bought">Bought / Delivered</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="electricitySource">Electricity</label>
+                                    <select id="electricitySource">
+                                        <option value="">Select...</option>
+                                        <option value="meralco">Grid Connected</option>
+                                        <option value="solar">Solar</option>
+                                        <option value="generator">Generator</option>
+                                        <option value="none">None</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="internetAccess">Internet Access</label>
+                                    <select id="internetAccess">
+                                        <option value="">Select...</option>
+                                        <option value="yes">Yes</option>
+                                        <option value="no">No</option>
+                                        <option value="mobile">Mobile Data Only</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-section">
+                            <h3><i class="fas fa-medkit"></i> Health & Safety</h3>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="toiletType">Toilet Facility</label>
+                                    <select id="toiletType">
+                                        <option value="">Select...</option>
+                                        <option value="flush">Flush Toilet</option>
+                                        <option value="pit">Pit Latrine</option>
+                                        <option value="none">None / Open Defecation</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="wasteDisposal">Waste Disposal</label>
+                                    <select id="wasteDisposal">
+                                        <option value="">Select...</option>
+                                        <option value="collected">Collected by LGU</option>
+                                        <option value="burned">Burned</option>
+                                        <option value="composting">Composting</option>
+                                        <option value="dumped">Open Dumping</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Health Programs Enrolled</label>
+                                <div class="checkbox-group">
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" name="healthProgram" value="philhealth"> PhilHealth
+                                    </label>
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" name="healthProgram" value="pcso"> PCSO
+                                    </label>
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" name="healthProgram" value="dswd"> DSWD
+                                    </label>
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" name="healthProgram" value="nhts"> NHTS
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-section">
+                            <h3><i class="fas fa-sticky-note"></i> Remarks</h3>
+                            <div class="form-group">
+                                <textarea id="remarks" rows="3"
+                                    placeholder="Additional notes, observations, special concerns..."></textarea>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="surveyedBy">Surveyed By</label>
+                                    <input type="text" id="surveyedBy" placeholder="Name of community worker">
+                                </div>
+                                <div class="form-group">
+                                    <label for="surveyDate">Survey Date</label>
+                                    <input type="date" id="surveyDate">
+                                </div>
+                            </div>
                         </div>
                     </div>
+
                 </div>
 
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" id="cancelBtn">Cancel</button>
                     <button type="submit" class="btn btn-primary" id="saveBtn">
-                        <i class="fas fa-save"></i> Save Person
+                        <i class="fas fa-save"></i> Save Household
                     </button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- ========== PERSON DETAIL PANEL ========== -->
+    <!-- ========== DETAIL PANEL ========== -->
     <div class="detail-panel" id="detailPanel">
         <div class="detail-header">
+            <h3 id="detailTitle">Household Details</h3>
             <button class="btn-icon" id="closeDetail">
                 <i class="fas fa-times"></i>
             </button>
         </div>
-        <div class="detail-content" id="detailContent">
-            <!-- Detail content injected dynamically -->
-        </div>
+        <div class="detail-content" id="detailContent"></div>
     </div>
 
-    <!-- ========== TOAST NOTIFICATION ========== -->
+    <!-- ========== MEMBER ROW TEMPLATE ========== -->
+    <template id="memberRowTemplate">
+        <div class="member-row">
+            <input type="text" placeholder="First Name" class="member-firstname">
+            <input type="text" placeholder="Last Name" class="member-lastname">
+            <input type="number" placeholder="Age" class="member-age" min="0" max="150">
+            <select class="member-gender">
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+            </select>
+            <input type="text" placeholder="Relationship to Head" class="member-relation">
+            <button type="button" class="btn-remove-member">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    </template>
+
+    <!-- ========== TOAST ========== -->
     <div class="toast-container" id="toastContainer"></div>
 
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    
-    <script src="app.js"></script>
+    <script src="js/app.js"></script>
 </body>
 </html>
