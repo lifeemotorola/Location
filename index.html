@@ -1,1 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Person Location Directory</title>
+    
+    <!-- Leaflet CSS (Open-source map library) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
 
+    <!-- ========== HEADER ========== -->
+    <header class="header">
+        <div class="header-left">
+            <i class="fas fa-map-marker-alt logo-icon"></i>
+            <h1>Person Locator</h1>
+        </div>
+        <div class="header-right">
+            <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" id="searchInput" placeholder="Search people...">
+            </div>
+            <button class="btn btn-primary" id="addPersonBtn">
+                <i class="fas fa-plus"></i> Add Person
+            </button>
+        </div>
+    </header>
+
+    <!-- ========== MAIN CONTENT ========== -->
+    <div class="main-container">
+
+        <!-- SIDEBAR -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h2><i class="fas fa-users"></i> People Directory</h2>
+                <span class="person-count" id="personCount">0 people</span>
+            </div>
+            <div class="sidebar-filters">
+                <select id="filterCategory">
+                    <option value="all">All Categories</option>
+                    <option value="family">Family</option>
+                    <option value="friend">Friend</option>
+                    <option value="colleague">Colleague</option>
+                    <option value="client">Client</option>
+                    <option value="other">Other</option>
+                </select>
+            </div>
+            <div class="person-list" id="personList">
+                <!-- Person cards will be injected here -->
+                <div class="empty-state" id="emptyState">
+                    <i class="fas fa-user-plus"></i>
+                    <p>No people added yet.</p>
+                    <p>Click on the map or use the "Add Person" button to get started.</p>
+                </div>
+            </div>
+        </aside>
+
+        <!-- MAP CONTAINER -->
+        <div class="map-wrapper">
+            <div id="map"></div>
+            <div class="map-instructions" id="mapInstructions">
+                <i class="fas fa-info-circle"></i>
+                Click anywhere on the map to add a person at that location
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== ADD/EDIT PERSON MODAL ========== -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal" id="personModal">
+            <div class="modal-header">
+                <h2 id="modalTitle"><i class="fas fa-user-plus"></i> Add New Person</h2>
+                <button class="modal-close" id="modalClose">&times;</button>
+            </div>
+            <form id="personForm">
+                <div class="modal-body">
+                    <!-- Photo Upload -->
+                    <div class="photo-upload">
+                        <div class="photo-preview" id="photoPreview">
+                            <i class="fas fa-user"></i>
+                        </div>
+                        <label for="photoInput" class="btn btn-secondary btn-sm">
+                            <i class="fas fa-camera"></i> Upload Photo
+                        </label>
+                        <input type="file" id="photoInput" accept="image/*" hidden>
+                    </div>
+
+                    <!-- Personal Information -->
+                    <div class="form-section">
+                        <h3><i class="fas fa-id-card"></i> Personal Information</h3>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="firstName">First Name *</label>
+                                <input type="text" id="firstName" required placeholder="John">
+                            </div>
+                            <div class="form-group">
+                                <label for="lastName">Last Name *</label>
+                                <input type="text" id="lastName" required placeholder="Doe">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="email">Email</label>
+                                <input type="email" id="email" placeholder="john@example.com">
+                            </div>
+                            <div class="form-group">
+                                <label for="phone">Phone</label>
+                                <input type="tel" id="phone" placeholder="+1 234 567 890">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="category">Category</label>
+                                <select id="category">
+                                    <option value="friend">Friend</option>
+                                    <option value="family">Family</option>
+                                    <option value="colleague">Colleague</option>
+                                    <option value="client">Client</option>
+                                    <option value="other">Other</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="age">Age</label>
+                                <input type="number" id="age" placeholder="25" min="0" max="150">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Location Information -->
+                    <div class="form-section">
+                        <h3><i class="fas fa-map-pin"></i> Location</h3>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="latitude">Latitude *</label>
+                                <input type="number" id="latitude" step="any" required placeholder="40.7128">
+                            </div>
+                            <div class="form-group">
+                                <label for="longitude">Longitude *</label>
+                                <input type="number" id="longitude" step="any" required placeholder="-74.0060">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="address">Address</label>
+                            <input type="text" id="address" placeholder="123 Main St, City, Country">
+                        </div>
+                        <button type="button" class="btn btn-secondary btn-sm" id="useCurrentLocation">
+                            <i class="fas fa-crosshairs"></i> Use My Current Location
+                        </button>
+                    </div>
+
+                    <!-- Additional Notes -->
+                    <div class="form-section">
+                        <h3><i class="fas fa-sticky-note"></i> Additional Notes</h3>
+                        <div class="form-group">
+                            <textarea id="notes" rows="3" placeholder="Any additional information..."></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" id="cancelBtn">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="saveBtn">
+                        <i class="fas fa-save"></i> Save Person
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ========== PERSON DETAIL PANEL ========== -->
+    <div class="detail-panel" id="detailPanel">
+        <div class="detail-header">
+            <button class="btn-icon" id="closeDetail">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="detail-content" id="detailContent">
+            <!-- Detail content injected dynamically -->
+        </div>
+    </div>
+
+    <!-- ========== TOAST NOTIFICATION ========== -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script src="js/app.js"></script>
+</body>
+</html>
