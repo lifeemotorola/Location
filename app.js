@@ -1,54 +1,84 @@
-// ===========================
-// PERSON LOCATOR APPLICATION
-// ===========================
+// ============================================
+// COMMUNITY LOCATOR — HOUSEHOLD MAPPING SYSTEM
+// ============================================
 
-class PersonLocator {
+class CommunityLocator {
     constructor() {
-        this.people = this.loadFromStorage();
+        this.households = this.loadFromStorage();
         this.map = null;
         this.markers = {};
         this.editingId = null;
         this.tempMarker = null;
+        this.activeTab = 'house';
 
         this.init();
     }
 
-    // ---- INITIALIZATION ----
+    // ─────────────────────────────────────────
+    // INIT
+    // ─────────────────────────────────────────
     init() {
         this.initMap();
         this.bindEvents();
-        this.renderPeople();
-        this.renderMarkers();
-        this.updateCount();
+        this.renderHouseholds();
+        this.renderAllMarkers();
+        this.updateStats();
+        this.populateStreetFilter();
     }
 
-    // ---- MAP SETUP ----
+    // ─────────────────────────────────────────
+    // MAP
+    // ─────────────────────────────────────────
     initMap() {
         this.map = L.map('map', {
-            center: [20, 0],
-            zoom: 3,
-            zoomControl: true,
-            attributionControl: true
+            center: [14.5995, 120.9842],
+            zoom: 13,
+            zoomControl: true
         });
 
-        // OpenStreetMap Tile Layer
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a> contributors',
             maxZoom: 19
         }).addTo(this.map);
 
-        // Click on map to add person
-        this.map.on('click', (e) => {
-            this.onMapClick(e.latlng);
-        });
+        this.map.on('click', (e) => this.onMapClick(e.latlng));
     }
 
-    // ---- EVENT BINDING ----
+    onMapClick(latlng) {
+        if (this.tempMarker) this.map.removeLayer(this.tempMarker);
+
+        this.tempMarker = L.marker(latlng, {
+            icon: this.createMarkerIcon('vacant')
+        }).addTo(this.map);
+
+        this.tempMarker.bindPopup(`
+            <div class="popup-header">
+                <div class="popup-house-num">📍 New Location</div>
+                <div class="popup-street">${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}</div>
+            </div>
+            <div class="popup-actions">
+                <button class="popup-btn-view"
+                    onclick="app.addHouseholdAtLocation(${latlng.lat}, ${latlng.lng})">
+                    Register Household Here
+                </button>
+            </div>
+        `).openPopup();
+    }
+
+    addHouseholdAtLocation(lat, lng) {
+        if (this.tempMarker) {
+            this.map.removeLayer(this.tempMarker);
+            this.tempMarker = null;
+        }
+        this.openModal(null, lat, lng);
+    }
+
+    // ─────────────────────────────────────────
+    // EVENTS
+    // ─────────────────────────────────────────
     bindEvents() {
-        // Add person button
-        document.getElementById('addPersonBtn').addEventListener('click', () => {
-            this.openModal();
-        });
+        // Header buttons
+        document.getElementById('addHouseBtn').addEventListener('click', () => this.openModal());
 
         // Modal close
         document.getElementById('modalClose').addEventListener('click', () => this.closeModal());
@@ -58,37 +88,41 @@ class PersonLocator {
         });
 
         // Form submit
-        document.getElementById('personForm').addEventListener('submit', (e) => {
+        document.getElementById('houseForm').addEventListener('submit', (e) => {
             e.preventDefault();
-            this.savePerson();
+            this.saveHousehold();
         });
 
-        // Photo upload
-        document.getElementById('photoInput').addEventListener('change', (e) => {
-            this.handlePhotoUpload(e);
+        // Tabs
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.switchTab(btn.dataset.tab);
+            });
         });
 
-        // Current location button
+        // Add member button
+        document.getElementById('addMemberBtn').addEventListener('click', () => {
+            this.addMemberRow();
+        });
+
+        // Current location
         document.getElementById('useCurrentLocation').addEventListener('click', () => {
             this.useCurrentLocation();
         });
 
         // Search
         document.getElementById('searchInput').addEventListener('input', (e) => {
-            this.filterPeople(e.target.value, document.getElementById('filterCategory').value);
+            this.applyFilters();
         });
 
-        // Filter by category
-        document.getElementById('filterCategory').addEventListener('change', (e) => {
-            this.filterPeople(document.getElementById('searchInput').value, e.target.value);
-        });
+        // Filters
+        document.getElementById('filterStatus').addEventListener('change', () => this.applyFilters());
+        document.getElementById('filterStreet').addEventListener('change', () => this.applyFilters());
 
-        // Close detail panel
-        document.getElementById('closeDetail').addEventListener('click', () => {
-            this.closeDetailPanel();
-        });
+        // Detail panel close
+        document.getElementById('closeDetail').addEventListener('click', () => this.closeDetailPanel());
 
-        // Keyboard shortcuts
+        // Keyboard
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 this.closeModal();
@@ -97,65 +131,49 @@ class PersonLocator {
         });
     }
 
-    // ---- MAP CLICK HANDLER ----
-    onMapClick(latlng) {
-        // Remove temp marker if exists
-        if (this.tempMarker) {
-            this.map.removeLayer(this.tempMarker);
-        }
+    // ─────────────────────────────────────────
+    // TABS
+    // ─────────────────────────────────────────
+    switchTab(tabName) {
+        this.activeTab = tabName;
 
-        // Add temporary marker
-        this.tempMarker = L.marker(latlng, {
-            icon: this.createTempIcon()
-        }).addTo(this.map);
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.tab === tabName);
+        });
 
-        this.tempMarker.bindPopup(`
-            <div class="popup-content">
-                <h3>📍 New Location</h3>
-                <p>Lat: ${latlng.lat.toFixed(6)}</p>
-                <p>Lng: ${latlng.lng.toFixed(6)}</p>
-                <div class="popup-actions">
-                    <button class="popup-btn-view" onclick="app.addPersonAtLocation(${latlng.lat}, ${latlng.lng})">
-                        Add Person Here
-                    </button>
-                </div>
-            </div>
-        `).openPopup();
+        document.querySelectorAll('.tab-content').forEach(tab => {
+            tab.classList.toggle('active', tab.id === `tab-${tabName}`);
+        });
     }
 
-    addPersonAtLocation(lat, lng) {
-        if (this.tempMarker) {
-            this.map.removeLayer(this.tempMarker);
-            this.tempMarker = null;
-        }
-        this.openModal(null, lat, lng);
-    }
+    // ─────────────────────────────────────────
+    // MODAL
+    // ─────────────────────────────────────────
+    openModal(household = null, lat = null, lng = null) {
+        this.resetForm();
+        this.switchTab('house');
 
-    // ---- MODAL OPERATIONS ----
-    openModal(person = null, lat = null, lng = null) {
-        const overlay = document.getElementById('modalOverlay');
         const title = document.getElementById('modalTitle');
 
-        this.resetForm();
-
-        if (person) {
-            // Edit mode
-            this.editingId = person.id;
-            title.innerHTML = '<i class="fas fa-user-edit"></i> Edit Person';
-            this.populateForm(person);
+        if (household) {
+            this.editingId = household.id;
+            title.innerHTML = '<i class="fas fa-edit"></i> Edit Household';
+            this.populateForm(household);
         } else {
-            // Add mode
             this.editingId = null;
-            title.innerHTML = '<i class="fas fa-user-plus"></i> Add New Person';
+            title.innerHTML = '<i class="fas fa-home"></i> Register Household';
 
             if (lat !== null && lng !== null) {
                 document.getElementById('latitude').value = lat.toFixed(6);
                 document.getElementById('longitude').value = lng.toFixed(6);
                 this.reverseGeocode(lat, lng);
             }
+
+            // Default survey date to today
+            document.getElementById('surveyDate').value = new Date().toISOString().split('T')[0];
         }
 
-        overlay.classList.add('active');
+        document.getElementById('modalOverlay').classList.add('active');
     }
 
     closeModal() {
@@ -165,524 +183,775 @@ class PersonLocator {
     }
 
     resetForm() {
-        document.getElementById('personForm').reset();
-        const preview = document.getElementById('photoPreview');
-        preview.innerHTML = '<i class="fas fa-user"></i>';
+        document.getElementById('houseForm').reset();
+        document.getElementById('membersList').innerHTML = '';
+
+        // Uncheck all checkboxes
+        document.querySelectorAll('input[name="healthProgram"]').forEach(cb => {
+            cb.checked = false;
+        });
     }
 
-    populateForm(person) {
-        document.getElementById('firstName').value = person.firstName || '';
-        document.getElementById('lastName').value = person.lastName || '';
-        document.getElementById('email').value = person.email || '';
-        document.getElementById('phone').value = person.phone || '';
-        document.getElementById('category').value = person.category || 'friend';
-        document.getElementById('age').value = person.age || '';
-        document.getElementById('latitude').value = person.lat || '';
-        document.getElementById('longitude').value = person.lng || '';
-        document.getElementById('address').value = person.address || '';
-        document.getElementById('notes').value = person.notes || '';
+    populateForm(h) {
+        // House Info
+        this.setVal('houseNumber', h.houseNumber);
+        this.setVal('houseLot', h.houseLot);
+        this.setVal('houseBlock', h.houseBlock);
+        this.setVal('houseStreet', h.houseStreet);
+        this.setVal('houseBarangay', h.houseBarangay);
+        this.setVal('houseMunicipality', h.houseMunicipality);
+        this.setVal('houseType', h.houseType);
+        this.setVal('houseStatus', h.houseStatus);
+        this.setVal('yearBuilt', h.yearBuilt);
+        this.setVal('houseColor', h.houseColor);
+        this.setVal('floorCount', h.floorCount);
+        this.setVal('roomCount', h.roomCount);
 
-        if (person.photo) {
-            const preview = document.getElementById('photoPreview');
-            preview.innerHTML = `<img src="${person.photo}" alt="Photo">`;
+        // Household Head
+        this.setVal('headFirstName', h.head?.firstName);
+        this.setVal('headLastName', h.head?.lastName);
+        this.setVal('headAge', h.head?.age);
+        this.setVal('headGender', h.head?.gender);
+        this.setVal('headCivilStatus', h.head?.civilStatus);
+        this.setVal('headOccupation', h.head?.occupation);
+        this.setVal('headContact', h.head?.contact);
+        this.setVal('headEmail', h.head?.email);
+
+        // Member counts
+        this.setVal('totalPersons', h.totalPersons);
+        this.setVal('totalMale', h.totalMale);
+        this.setVal('totalFemale', h.totalFemale);
+        this.setVal('totalMinors', h.totalMinors);
+        this.setVal('totalSenior', h.totalSenior);
+        this.setVal('totalPwd', h.totalPwd);
+
+        // Individual members
+        if (h.members && h.members.length > 0) {
+            h.members.forEach(m => this.addMemberRow(m));
+        }
+
+        // Location
+        this.setVal('latitude', h.lat);
+        this.setVal('longitude', h.lng);
+        this.setVal('fullAddress', h.fullAddress);
+        this.setVal('landmark', h.landmark);
+        this.setVal('zone', h.zone);
+        this.setVal('precinct', h.precinct);
+
+        // Others
+        this.setVal('incomeClass', h.incomeClass);
+        this.setVal('waterSource', h.waterSource);
+        this.setVal('electricitySource', h.electricitySource);
+        this.setVal('internetAccess', h.internetAccess);
+        this.setVal('toiletType', h.toiletType);
+        this.setVal('wasteDisposal', h.wasteDisposal);
+        this.setVal('remarks', h.remarks);
+        this.setVal('surveyedBy', h.surveyedBy);
+        this.setVal('surveyDate', h.surveyDate);
+
+        // Checkboxes
+        if (h.healthPrograms) {
+            h.healthPrograms.forEach(prog => {
+                const cb = document.querySelector(`input[name="healthProgram"][value="${prog}"]`);
+                if (cb) cb.checked = true;
+            });
         }
     }
 
-    // ---- SAVE PERSON ----
-    savePerson() {
-        const person = {
+    setVal(id, value) {
+        const el = document.getElementById(id);
+        if (el && value !== undefined && value !== null) el.value = value;
+    }
+
+    // ─────────────────────────────────────────
+    // MEMBERS
+    // ─────────────────────────────────────────
+    addMemberRow(data = null) {
+        const template = document.getElementById('memberRowTemplate');
+        const clone = template.content.cloneNode(true);
+        const row = clone.querySelector('.member-row');
+
+        if (data) {
+            row.querySelector('.member-firstname').value = data.firstName || '';
+            row.querySelector('.member-lastname').value = data.lastName || '';
+            row.querySelector('.member-age').value = data.age || '';
+            row.querySelector('.member-gender').value = data.gender || 'male';
+            row.querySelector('.member-relation').value = data.relation || '';
+        }
+
+        row.querySelector('.btn-remove-member').addEventListener('click', () => {
+            row.remove();
+        });
+
+        document.getElementById('membersList').appendChild(row);
+    }
+
+    getMembers() {
+        const rows = document.querySelectorAll('#membersList .member-row');
+        return Array.from(rows).map(row => ({
+            firstName: row.querySelector('.member-firstname').value.trim(),
+            lastName: row.querySelector('.member-lastname').value.trim(),
+            age: row.querySelector('.member-age').value,
+            gender: row.querySelector('.member-gender').value,
+            relation: row.querySelector('.member-relation').value.trim()
+        })).filter(m => m.firstName || m.lastName);
+    }
+
+    getHealthPrograms() {
+        return Array.from(document.querySelectorAll('input[name="healthProgram"]:checked'))
+            .map(cb => cb.value);
+    }
+
+    // ─────────────────────────────────────────
+    // SAVE HOUSEHOLD
+    // ─────────────────────────────────────────
+    saveHousehold() {
+        const lat = parseFloat(document.getElementById('latitude').value);
+        const lng = parseFloat(document.getElementById('longitude').value);
+
+        if (isNaN(lat) || isNaN(lng)) {
+            this.showToast('Please set a location for this household.', 'error');
+            this.switchTab('location');
+            return;
+        }
+
+        const household = {
             id: this.editingId || this.generateId(),
-            firstName: document.getElementById('firstName').value.trim(),
-            lastName: document.getElementById('lastName').value.trim(),
-            email: document.getElementById('email').value.trim(),
-            phone: document.getElementById('phone').value.trim(),
-            category: document.getElementById('category').value,
-            age: document.getElementById('age').value,
-            lat: parseFloat(document.getElementById('latitude').value),
-            lng: parseFloat(document.getElementById('longitude').value),
-            address: document.getElementById('address').value.trim(),
-            notes: document.getElementById('notes').value.trim(),
-            photo: this.currentPhoto || null,
+
+            // House Info
+            houseNumber: document.getElementById('houseNumber').value.trim(),
+            houseLot: document.getElementById('houseLot').value.trim(),
+            houseBlock: document.getElementById('houseBlock').value.trim(),
+            houseStreet: document.getElementById('houseStreet').value.trim(),
+            houseBarangay: document.getElementById('houseBarangay').value.trim(),
+            houseMunicipality: document.getElementById('houseMunicipality').value.trim(),
+            houseType: document.getElementById('houseType').value,
+            houseStatus: document.getElementById('houseStatus').value,
+            yearBuilt: document.getElementById('yearBuilt').value,
+            houseColor: document.getElementById('houseColor').value.trim(),
+            floorCount: document.getElementById('floorCount').value,
+            roomCount: document.getElementById('roomCount').value,
+
+            // Head
+            head: {
+                firstName: document.getElementById('headFirstName').value.trim(),
+                lastName: document.getElementById('headLastName').value.trim(),
+                age: document.getElementById('headAge').value,
+                gender: document.getElementById('headGender').value,
+                civilStatus: document.getElementById('headCivilStatus').value,
+                occupation: document.getElementById('headOccupation').value.trim(),
+                contact: document.getElementById('headContact').value.trim(),
+                email: document.getElementById('headEmail').value.trim()
+            },
+
+            // Residents summary
+            totalPersons: parseInt(document.getElementById('totalPersons').value) || 0,
+            totalMale: parseInt(document.getElementById('totalMale').value) || 0,
+            totalFemale: parseInt(document.getElementById('totalFemale').value) || 0,
+            totalMinors: parseInt(document.getElementById('totalMinors').value) || 0,
+            totalSenior: parseInt(document.getElementById('totalSenior').value) || 0,
+            totalPwd: parseInt(document.getElementById('totalPwd').value) || 0,
+
+            // Individual members
+            members: this.getMembers(),
+
+            // Location
+            lat,
+            lng,
+            fullAddress: document.getElementById('fullAddress').value.trim(),
+            landmark: document.getElementById('landmark').value.trim(),
+            zone: document.getElementById('zone').value.trim(),
+            precinct: document.getElementById('precinct').value.trim(),
+
+            // Others
+            incomeClass: document.getElementById('incomeClass').value,
+            waterSource: document.getElementById('waterSource').value,
+            electricitySource: document.getElementById('electricitySource').value,
+            internetAccess: document.getElementById('internetAccess').value,
+            toiletType: document.getElementById('toiletType').value,
+            wasteDisposal: document.getElementById('wasteDisposal').value,
+            healthPrograms: this.getHealthPrograms(),
+            remarks: document.getElementById('remarks').value.trim(),
+            surveyedBy: document.getElementById('surveyedBy').value.trim(),
+            surveyDate: document.getElementById('surveyDate').value,
+
             createdAt: this.editingId
-                ? this.people.find(p => p.id === this.editingId)?.createdAt || new Date().toISOString()
+                ? (this.households.find(h => h.id === this.editingId)?.createdAt || new Date().toISOString())
                 : new Date().toISOString(),
             updatedAt: new Date().toISOString()
         };
 
-        // Validate coordinates
-        if (isNaN(person.lat) || isNaN(person.lng)) {
-            this.showToast('Please provide valid coordinates.', 'error');
-            return;
-        }
-
         if (this.editingId) {
-            // Update existing
-            const index = this.people.findIndex(p => p.id === this.editingId);
-            if (index !== -1) {
-                // Preserve photo if not changed
-                if (!person.photo && this.people[index].photo) {
-                    person.photo = this.people[index].photo;
-                }
-                this.people[index] = person;
-            }
-            this.showToast(`${person.firstName} ${person.lastName} updated!`, 'success');
+            const idx = this.households.findIndex(h => h.id === this.editingId);
+            if (idx !== -1) this.households[idx] = household;
+            this.showToast(`House #${household.houseNumber} updated!`, 'success');
         } else {
-            // Add new
-            this.people.push(person);
-            this.showToast(`${person.firstName} ${person.lastName} added!`, 'success');
+            this.households.push(household);
+            this.showToast(`House #${household.houseNumber} registered!`, 'success');
         }
 
         this.saveToStorage();
-        this.renderPeople();
-        this.renderMarkers();
-        this.updateCount();
+        this.renderHouseholds();
+        this.renderAllMarkers();
+        this.updateStats();
+        this.populateStreetFilter();
         this.closeModal();
-
-        // Fly to location
-        this.map.flyTo([person.lat, person.lng], 14, { duration: 1.5 });
-
-        this.currentPhoto = null;
+        this.map.flyTo([household.lat, household.lng], 17, { duration: 1.5 });
     }
 
-    // ---- DELETE PERSON ----
-    deletePerson(id) {
-        const person = this.people.find(p => p.id === id);
-        if (!person) return;
+    // ─────────────────────────────────────────
+    // DELETE
+    // ─────────────────────────────────────────
+    deleteHousehold(id) {
+        const h = this.households.find(h => h.id === id);
+        if (!h) return;
 
-        if (confirm(`Are you sure you want to remove ${person.firstName} ${person.lastName}?`)) {
-            this.people = this.people.filter(p => p.id !== id);
+        if (confirm(`Remove House #${h.houseNumber} on ${h.houseStreet}?`)) {
+            this.households = this.households.filter(h => h.id !== id);
             this.saveToStorage();
-            this.renderPeople();
-            this.renderMarkers();
-            this.updateCount();
+            this.renderHouseholds();
+            this.renderAllMarkers();
+            this.updateStats();
+            this.populateStreetFilter();
             this.closeDetailPanel();
-            this.showToast(`${person.firstName} ${person.lastName} removed.`, 'warning');
+            this.showToast(`House #${h.houseNumber} removed.`, 'warning');
         }
     }
 
-    // ---- RENDER SIDEBAR LIST ----
-    renderPeople(filtered = null) {
-        const list = document.getElementById('personList');
-        const emptyState = document.getElementById('emptyState');
-        const data = filtered || this.people;
+    // ─────────────────────────────────────────
+    // RENDER SIDEBAR
+    // ─────────────────────────────────────────
+    renderHouseholds(data = null) {
+        const list = document.getElementById('houseList');
+        const items = data !== null ? data : this.households;
 
-        if (data.length === 0) {
+        if (items.length === 0) {
             list.innerHTML = '';
-            list.appendChild(this.createEmptyState(filtered ? 'No matches found.' : null));
+            const empty = document.createElement('div');
+            empty.className = 'empty-state';
+            empty.innerHTML = `
+                <i class="fas fa-home"></i>
+                <p>${data !== null ? 'No matching households found.' : 'No households recorded yet.'}</p>
+                ${data === null ? '<p>Click on the map or use "Add Household" to get started.</p>' : ''}
+            `;
+            list.appendChild(empty);
             return;
         }
 
-        list.innerHTML = data.map(person => `
-            <div class="person-card" data-id="${person.id}" onclick="app.selectPerson('${person.id}')">
-                <div class="person-card-top">
-                    <div class="person-avatar" style="background: ${this.getCategoryColor(person.category)}">
-                        ${person.photo
-                            ? `<img src="${person.photo}" alt="${person.firstName}">`
-                            : this.getInitials(person.firstName, person.lastName)
-                        }
+        list.innerHTML = items.map(h => `
+            <div class="house-card" data-id="${h.id}" onclick="app.selectHousehold('${h.id}')">
+                <div class="house-card-header">
+                    <div class="house-icon ${h.houseStatus}">
+                        <i class="fas fa-${this.getStatusIcon(h.houseStatus)}"></i>
                     </div>
-                    <div class="person-info">
-                        <div class="person-name">${person.firstName} ${person.lastName}</div>
-                        <div class="person-location">
-                            <i class="fas fa-map-pin"></i>
-                            ${person.address || `${person.lat.toFixed(4)}, ${person.lng.toFixed(4)}`}
+                    <div class="house-info">
+                        <div class="house-number">
+                            ${h.houseNumber}
+                            ${h.houseLot ? `<span style="font-weight:400;font-size:12px;color:var(--secondary)"> · Lot ${h.houseLot}</span>` : ''}
+                            ${h.houseBlock ? `<span style="font-weight:400;font-size:12px;color:var(--secondary)"> · Blk ${h.houseBlock}</span>` : ''}
+                        </div>
+                        <div class="house-head">
+                            <i class="fas fa-user-tie" style="color:var(--primary-light);font-size:10px;margin-right:3px;"></i>
+                            ${h.head?.firstName || ''} ${h.head?.lastName || 'No Head Recorded'}
+                        </div>
+                        <div class="house-street">
+                            <i class="fas fa-road"></i> ${h.houseStreet || 'No street recorded'}
+                            ${h.houseBarangay ? `, ${h.houseBarangay}` : ''}
                         </div>
                     </div>
-                    <span class="category-badge ${person.category}">${person.category}</span>
+                </div>
+                <div class="house-card-footer">
+                    <div class="residents-badge">
+                        <i class="fas fa-users"></i>
+                        ${h.totalPersons || 0} person${h.totalPersons !== 1 ? 's' : ''}
+                    </div>
+                    ${h.zone ? `<div class="residents-badge"><i class="fas fa-map"></i> ${h.zone}</div>` : ''}
+                    <span class="status-badge ${h.houseStatus}">${this.getStatusLabel(h.houseStatus)}</span>
                 </div>
             </div>
         `).join('');
     }
 
-    createEmptyState(message) {
-        const div = document.createElement('div');
-        div.className = 'empty-state';
-        div.innerHTML = `
-            <i class="fas fa-user-plus"></i>
-            <p>${message || 'No people added yet.'}</p>
-            ${!message ? '<p>Click on the map or use the "Add Person" button to get started.</p>' : ''}
-        `;
-        return div;
-    }
-
-    // ---- RENDER MAP MARKERS ----
-    renderMarkers() {
-        // Remove existing markers
-        Object.values(this.markers).forEach(marker => {
-            this.map.removeLayer(marker);
-        });
+    // ─────────────────────────────────────────
+    // MARKERS
+    // ─────────────────────────────────────────
+    renderAllMarkers() {
+        Object.values(this.markers).forEach(m => this.map.removeLayer(m));
         this.markers = {};
 
-        // Add markers for each person
-        this.people.forEach(person => {
-            const icon = this.createCustomIcon(person.category);
-            const marker = L.marker([person.lat, person.lng], { icon })
-                .addTo(this.map);
-
-            marker.bindPopup(this.createPopupContent(person));
-
-            marker.on('click', () => {
-                this.highlightCard(person.id);
-            });
-
-            this.markers[person.id] = marker;
+        this.households.forEach(h => {
+            const icon = this.createMarkerIcon(h.houseStatus);
+            const marker = L.marker([h.lat, h.lng], { icon }).addTo(this.map);
+            marker.bindPopup(this.buildPopup(h));
+            this.markers[h.id] = marker;
         });
     }
 
-    createCustomIcon(category) {
+    createMarkerIcon(status) {
         return L.divIcon({
             className: 'custom-marker',
-            html: `<div class="marker-pin ${category}"></div>`,
-            iconSize: [36, 48],
-            iconAnchor: [18, 48],
-            popupAnchor: [0, -48]
+            html: `<div class="marker-pin ${status}"></div>`,
+            iconSize: [32, 44],
+            iconAnchor: [16, 44],
+            popupAnchor: [0, -44]
         });
     }
 
-    createTempIcon() {
-        return L.divIcon({
-            className: 'custom-marker',
-            html: `<div class="marker-pin" style="background: #6B7280;"></div>`,
-            iconSize: [36, 48],
-            iconAnchor: [18, 48],
-            popupAnchor: [0, -48]
-        });
-    }
-
-    createPopupContent(person) {
+    buildPopup(h) {
         return `
-            <div class="popup-content">
-                <h3>${person.firstName} ${person.lastName}</h3>
-                ${person.address ? `<p><i class="fas fa-map-pin"></i> ${person.address}</p>` : ''}
-                ${person.phone ? `<p><i class="fas fa-phone"></i> ${person.phone}</p>` : ''}
-                <span class="category-badge ${person.category}">${person.category}</span>
-                <div class="popup-actions">
-                    <button class="popup-btn-view" onclick="app.showPersonDetail('${person.id}')">
-                        View Details
-                    </button>
-                    <button class="popup-btn-delete" onclick="app.deletePerson('${person.id}')">
-                        Delete
-                    </button>
+            <div class="popup-header">
+                <div class="popup-house-num">
+                    House #${h.houseNumber}
+                    ${h.houseLot ? ` · Lot ${h.houseLot}` : ''}
                 </div>
+                <div class="popup-street">${h.houseStreet || ''}${h.houseBarangay ? `, ${h.houseBarangay}` : ''}</div>
+            </div>
+            <div class="popup-body">
+                <div class="popup-row">
+                    <i class="fas fa-user-tie"></i>
+                    ${h.head?.firstName || ''} ${h.head?.lastName || 'No Head'}
+                </div>
+                <div class="popup-row">
+                    <i class="fas fa-users"></i>
+                    ${h.totalPersons || 0} resident(s) · ${h.totalMale || 0}M / ${h.totalFemale || 0}F
+                </div>
+                ${h.head?.contact ? `
+                <div class="popup-row">
+                    <i class="fas fa-phone"></i> ${h.head.contact}
+                </div>` : ''}
+                ${h.zone ? `
+                <div class="popup-row">
+                    <i class="fas fa-map"></i> ${h.zone}
+                </div>` : ''}
+            </div>
+            <div class="popup-actions">
+                <button class="popup-btn-view" onclick="app.showDetail('${h.id}')">
+                    <i class="fas fa-eye"></i> View
+                </button>
+                <button class="popup-btn-edit" onclick="app.openModal(app.households.find(x=>x.id==='${h.id}'))">
+                    <i class="fas fa-edit"></i> Edit
+                </button>
             </div>
         `;
     }
 
-    // ---- SELECT / HIGHLIGHT ----
-    selectPerson(id) {
-        const person = this.people.find(p => p.id === id);
-        if (!person) return;
+    // ─────────────────────────────────────────
+    // SELECT
+    // ─────────────────────────────────────────
+    selectHousehold(id) {
+        const h = this.households.find(h => h.id === id);
+        if (!h) return;
 
-        // Fly to location
-        this.map.flyTo([person.lat, person.lng], 15, { duration: 1 });
+        this.map.flyTo([h.lat, h.lng], 17, { duration: 1 });
 
-        // Open popup
-        if (this.markers[id]) {
-            this.markers[id].openPopup();
-        }
+        if (this.markers[id]) this.markers[id].openPopup();
 
-        // Highlight card
-        this.highlightCard(id);
-    }
-
-    highlightCard(id) {
-        document.querySelectorAll('.person-card').forEach(card => {
-            card.classList.remove('active');
-        });
-        const card = document.querySelector(`.person-card[data-id="${id}"]`);
+        document.querySelectorAll('.house-card').forEach(c => c.classList.remove('active'));
+        const card = document.querySelector(`.house-card[data-id="${id}"]`);
         if (card) {
             card.classList.add('active');
             card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
     }
 
-    // ---- DETAIL PANEL ----
-    showPersonDetail(id) {
-        const person = this.people.find(p => p.id === id);
-        if (!person) return;
+    // ─────────────────────────────────────────
+    // DETAIL PANEL
+    // ─────────────────────────────────────────
+    showDetail(id) {
+        const h = this.households.find(h => h.id === id);
+        if (!h) return;
 
-        const panel = document.getElementById('detailPanel');
+        const statusColors = {
+            owner: '#4F46E5', renter: '#10B981',
+            vacant: '#F59E0B', business: '#EC4899'
+        };
+
+        document.getElementById('detailTitle').textContent = `House #${h.houseNumber}`;
+
         const content = document.getElementById('detailContent');
-
         content.innerHTML = `
-            <div class="detail-avatar" style="background: ${this.getCategoryColor(person.category)}">
-                ${person.photo
-                    ? `<img src="${person.photo}" alt="${person.firstName}">`
-                    : this.getInitials(person.firstName, person.lastName)
-                }
-            </div>
-            <div class="detail-name">${person.firstName} ${person.lastName}</div>
-            <div class="detail-category">
-                <span class="category-badge ${person.category}">${person.category}</span>
-            </div>
 
-            <div class="detail-section">
-                <h3>Contact Information</h3>
-                ${person.email ? `
-                    <div class="detail-item">
-                        <i class="fas fa-envelope"></i>
-                        <div class="detail-item-content">
-                            <div class="detail-item-label">Email</div>
-                            <div class="detail-item-value">${person.email}</div>
-                        </div>
-                    </div>
-                ` : ''}
-                ${person.phone ? `
-                    <div class="detail-item">
-                        <i class="fas fa-phone"></i>
-                        <div class="detail-item-content">
-                            <div class="detail-item-label">Phone</div>
-                            <div class="detail-item-value">${person.phone}</div>
-                        </div>
-                    </div>
-                ` : ''}
-                ${person.age ? `
-                    <div class="detail-item">
-                        <i class="fas fa-birthday-cake"></i>
-                        <div class="detail-item-content">
-                            <div class="detail-item-label">Age</div>
-                            <div class="detail-item-value">${person.age} years old</div>
-                        </div>
-                    </div>
-                ` : ''}
-            </div>
-
-            <div class="detail-section">
-                <h3>Location</h3>
-                <div class="detail-item">
-                    <i class="fas fa-map-marker-alt"></i>
-                    <div class="detail-item-content">
-                        <div class="detail-item-label">Coordinates</div>
-                        <div class="detail-item-value">${person.lat.toFixed(6)}, ${person.lng.toFixed(6)}</div>
-                    </div>
+            <!-- Banner -->
+            <div class="detail-house-banner">
+                <div class="detail-house-num">🏠 House #${h.houseNumber}</div>
+                <div class="detail-house-street">
+                    ${[h.houseStreet, h.houseBarangay, h.houseMunicipality].filter(Boolean).join(', ')}
                 </div>
-                ${person.address ? `
-                    <div class="detail-item">
-                        <i class="fas fa-home"></i>
-                        <div class="detail-item-content">
-                            <div class="detail-item-label">Address</div>
-                            <div class="detail-item-value">${person.address}</div>
-                        </div>
-                    </div>
-                ` : ''}
+                <div class="detail-house-meta">
+                    <span class="detail-badge">${this.getStatusLabel(h.houseStatus)}</span>
+                    ${h.houseType ? `<span class="detail-badge">${h.houseType}</span>` : ''}
+                    ${h.zone ? `<span class="detail-badge">${h.zone}</span>` : ''}
+                    ${h.precinct ? `<span class="detail-badge">Precinct ${h.precinct}</span>` : ''}
+                </div>
             </div>
 
-            ${person.notes ? `
-                <div class="detail-section">
-                    <h3>Notes</h3>
-                    <div class="detail-item">
-                        <i class="fas fa-sticky-note"></i>
-                        <div class="detail-item-content">
-                            <div class="detail-item-value">${person.notes}</div>
-                        </div>
-                    </div>
+            <!-- Population Stats -->
+            <div class="stats-row">
+                <div class="stat-box">
+                    <div class="stat-box-num">${h.totalPersons || 0}</div>
+                    <div class="stat-box-label">Total</div>
                 </div>
-            ` : ''}
+                <div class="stat-box">
+                    <div class="stat-box-num">${h.totalMale || 0}</div>
+                    <div class="stat-box-label">Male</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-box-num">${h.totalFemale || 0}</div>
+                    <div class="stat-box-label">Female</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-box-num">${h.totalMinors || 0}</div>
+                    <div class="stat-box-label">Minors</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-box-num">${h.totalSenior || 0}</div>
+                    <div class="stat-box-label">Senior</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-box-num">${h.totalPwd || 0}</div>
+                    <div class="stat-box-label">PWD</div>
+                </div>
+            </div>
 
+            <!-- Household Head -->
             <div class="detail-section">
-                <h3>Metadata</h3>
-                <div class="detail-item">
-                    <i class="fas fa-clock"></i>
-                    <div class="detail-item-content">
-                        <div class="detail-item-label">Added</div>
-                        <div class="detail-item-value">${new Date(person.createdAt).toLocaleDateString('en-US', {
-                            year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
-                        })}</div>
+                <div class="detail-section-title">
+                    <i class="fas fa-user-tie"></i> Household Head
+                </div>
+                <div class="resident-cards">
+                    <div class="resident-card">
+                        <div class="resident-avatar" style="background:${statusColors[h.houseStatus]}">
+                            ${this.getInitials(h.head?.firstName, h.head?.lastName)}
+                        </div>
+                        <div class="resident-info">
+                            <div class="resident-name">${h.head?.firstName || ''} ${h.head?.lastName || 'N/A'}</div>
+                            <div class="resident-meta">
+                                ${[h.head?.age ? `Age ${h.head.age}` : '', h.head?.gender, h.head?.civilStatus, h.head?.occupation].filter(Boolean).join(' · ')}
+                            </div>
+                            ${h.head?.contact ? `<div class="resident-meta"><i class="fas fa-phone" style="font-size:10px"></i> ${h.head.contact}</div>` : ''}
+                        </div>
+                        <span class="resident-head-badge">HEAD</span>
                     </div>
                 </div>
             </div>
 
-            <div class="detail-actions">
-                <button class="btn btn-primary" onclick="app.openModal(app.people.find(p=>p.id==='${person.id}'))">
-                    <i class="fas fa-edit"></i> Edit
-                </button>
-                <button class="btn btn-danger" onclick="app.deletePerson('${person.id}')">
-                    <i class="fas fa-trash"></i> Delete
-                </button>
+            <!-- Other Members -->
+            ${h.members && h.members.length > 0 ? `
+            <div class="detail-section">
+                <div class="detail-section-title">
+                    <i class="fas fa-users"></i> Other Members (${h.members.length})
+                </div>
+                <div class="resident-cards">
+                    ${h.members.map(m => `
+                        <div class="resident-card">
+                            <div class="resident-avatar" style="background:#8B5CF6">
+                                ${this.getInitials(m.firstName, m.lastName)}
+                            </div>
+                            <div class="resident-info">
+                                <div class="resident-name">${m.firstName} ${m.lastName}</div>
+                                <div class="resident-meta">
+                                    ${[m.age ? `Age ${m.age}` : '', m.gender, m.relation].filter(Boolean).join(' · ')}
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>` : ''}
+
+            <!-- House Details -->
+            <div class="detail-section">
+                <div class="detail-section-title">
+                    <i class="fas fa-building"></i> House Details
+                </div>
+                <div class="detail-grid">
+                    ${this.detailItem('Lot Number', h.houseLot)}
+                    ${this.detailItem('Block Number', h.houseBlock)}
+                    ${this.detailItem('House Type', h.houseType)}
+                    ${this.detailItem('Year Built', h.yearBuilt)}
+                    ${this.detailItem('Floors', h.floorCount)}
+                    ${this.detailItem('Rooms', h.roomCount)}
+                    ${this.detailItem('Color', h.houseColor)}
+                    ${this.detailItem('Barangay', h.houseBarangay)}
+                    ${this.detailItem('Municipality', h.houseMunicipality)}
+                </div>
+            </div>
+
+            <!-- Location -->
+            <div class="detail-section">
+                <div class="detail-section-title">
+                    <i class="fas fa-map-marker-alt"></i> Location
+                </div>
+                <div class="detail-grid">
+                    ${this.detailItem('Coordinates', `${h.lat.toFixed(5)}, ${h.lng.toFixed(5)}`)}
+                    ${this.detailItem('Zone / Purok', h.zone)}
+                    ${this.detailItem('Precinct', h.precinct)}
+                    ${this.detailItem('Landmark', h.landmark)}
+                </div>
+                ${h.fullAddress ? `<div class="detail-item" style="margin-top:10px">
+                    <div class="detail-item-label">Full Address</div>
+                    <div class="detail-item-value">${h.fullAddress}</div>
+                </div>` : ''}
+            </div>
+
+            <!-- Social & Economic -->
+            <div class="detail-section">
+                <div class="detail-section-title">
+                    <i class="fas fa-hand-holding-heart"></i> Social & Economic
+                </div>
+                <div class="detail-grid">
+                    ${this.detailItem('Income Class', h.incomeClass)}
+                    ${this.detailItem('Water Source', h.waterSource)}
+                    ${this.detailItem('Electricity', h.electricitySource)}
+                    ${this.detailItem('Internet', h.internetAccess)}
+                    ${this.detailItem('Toilet', h.toiletType)}
+                    ${this.detailItem('Waste Disposal', h.wasteDisposal)}
+                </div>
+                ${h.healthPrograms && h.healthPrograms.length > 0 ? `
+                <div style="margin-top:10px">
+                    <div class="detail-item-label">Health Programs</div>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px">
+                        ${h.healthPrograms.map(p => `
+                            <span class="detail-badge" style="background:rgba(16,185,129,0.1);color:#10B981;border-radius:50px;padding:2px 10px;font-size:11px;font-weight:600;">${p.toUpperCase()}</span>
+                        `).join('')}
+                    </div>
+                </div>` : ''}
+            </div>
+
+            <!-- Survey Info -->
+            <div class="detail-section">
+                <div class="detail-section-title">
+                    <i class="fas fa-clipboard-check"></i> Survey Information
+                </div>
+                <div class="detail-grid">
+                    ${this.detailItem('Surveyed By', h.surveyedBy)}
+                    ${this.detailItem('Survey Date', h.surveyDate ? new Date(h.surveyDate).toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric'}) : '')}
+                    ${this.detailItem('Date Added', new Date(h.createdAt).toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric'}))}
+                    ${this.detailItem('Last Updated', new Date(h.updatedAt).toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric'}))}
+                </div>
+                ${h.remarks ? `
+                <div style="margin-top:10px;background:var(--light);border-radius:8px;padding:12px;">
+                    <div class="detail-item-label" style="margin-bottom:5px">Remarks</div>
+                    <div style="font-size:13px;color:var(--dark);line-height:1.6">${h.remarks}</div>
+                </div>` : ''}
             </div>
         `;
 
-        panel.classList.add('active');
+        // Inject action buttons
+        const actions = document.getElementById('detailPanel').querySelector('.detail-actions');
+        if (actions) {
+            actions.innerHTML = `
+                <button class="btn btn-primary-dark" onclick="app.openModal(app.households.find(x=>x.id==='${h.id}'))">
+                    <i class="fas fa-edit"></i> Edit
+                </button>
+                <button class="btn btn-danger" onclick="app.deleteHousehold('${h.id}')">
+                    <i class="fas fa-trash"></i> Delete
+                </button>
+            `;
+        }
 
-        // Close map popup
         this.map.closePopup();
+        document.getElementById('detailPanel').classList.add('active');
+        this.selectHousehold(id);
+    }
+
+    detailItem(label, value) {
+        if (!value && value !== 0) return '';
+        return `
+            <div class="detail-item">
+                <div class="detail-item-label">${label}</div>
+                <div class="detail-item-value">${value}</div>
+            </div>
+        `;
     }
 
     closeDetailPanel() {
         document.getElementById('detailPanel').classList.remove('active');
     }
 
-    // ---- FILTER / SEARCH ----
-    filterPeople(searchTerm, category) {
-        let filtered = [...this.people];
+    // ─────────────────────────────────────────
+    // FILTERS & SEARCH
+    // ─────────────────────────────────────────
+    applyFilters() {
+        const search = document.getElementById('searchInput').value.toLowerCase().trim();
+        const status = document.getElementById('filterStatus').value;
+        const street = document.getElementById('filterStreet').value;
 
-        if (category && category !== 'all') {
-            filtered = filtered.filter(p => p.category === category);
-        }
+        let filtered = [...this.households];
 
-        if (searchTerm && searchTerm.trim()) {
-            const term = searchTerm.toLowerCase().trim();
-            filtered = filtered.filter(p =>
-                p.firstName.toLowerCase().includes(term) ||
-                p.lastName.toLowerCase().includes(term) ||
-                (p.email && p.email.toLowerCase().includes(term)) ||
-                (p.phone && p.phone.includes(term)) ||
-                (p.address && p.address.toLowerCase().includes(term))
+        if (status !== 'all') filtered = filtered.filter(h => h.houseStatus === status);
+        if (street !== 'all') filtered = filtered.filter(h => h.houseStreet === street);
+
+        if (search) {
+            filtered = filtered.filter(h =>
+                h.houseNumber?.toLowerCase().includes(search) ||
+                h.houseStreet?.toLowerCase().includes(search) ||
+                h.houseBarangay?.toLowerCase().includes(search) ||
+                h.houseMunicipality?.toLowerCase().includes(search) ||
+                h.head?.firstName?.toLowerCase().includes(search) ||
+                h.head?.lastName?.toLowerCase().includes(search) ||
+                h.head?.contact?.includes(search) ||
+                h.zone?.toLowerCase().includes(search) ||
+                h.houseLot?.toLowerCase().includes(search) ||
+                h.houseBlock?.toLowerCase().includes(search) ||
+                h.fullAddress?.toLowerCase().includes(search)
             );
         }
 
-        this.renderPeople(filtered);
+        this.renderHouseholds(filtered);
 
-        // Update markers visibility
         Object.keys(this.markers).forEach(id => {
-            const isVisible = filtered.some(p => p.id === id);
-            if (isVisible) {
-                this.markers[id].setOpacity(1);
-            } else {
-                this.markers[id].setOpacity(0.2);
-            }
+            const visible = filtered.some(h => h.id === id);
+            this.markers[id].setOpacity(visible ? 1 : 0.15);
         });
     }
 
-    // ---- PHOTO HANDLING ----
-    handlePhotoUpload(event) {
-        const file = event.target.files[0];
-        if (!file) return;
+    populateStreetFilter() {
+        const streets = [...new Set(this.households.map(h => h.houseStreet).filter(Boolean))].sort();
+        const select = document.getElementById('filterStreet');
+        const current = select.value;
 
-        if (file.size > 2 * 1024 * 1024) {
-            this.showToast('Photo must be less than 2MB.', 'error');
-            return;
-        }
+        select.innerHTML = '<option value="all">All Streets</option>' +
+            streets.map(s => `<option value="${s}">${s}</option>`).join('');
 
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            this.currentPhoto = e.target.result;
-            const preview = document.getElementById('photoPreview');
-            preview.innerHTML = `<img src="${e.target.result}" alt="Preview">`;
-        };
-        reader.readAsDataURL(file);
+        if (streets.includes(current)) select.value = current;
     }
 
-    // ---- GEOLOCATION ----
+    // ─────────────────────────────────────────
+    // STATS
+    // ─────────────────────────────────────────
+    updateStats() {
+        const total = this.households.length;
+        const totalResidents = this.households.reduce((sum, h) => sum + (h.totalPersons || 0), 0);
+        const streets = new Set(this.households.map(h => h.houseStreet).filter(Boolean)).size;
+
+        document.getElementById('totalHouses').textContent = total;
+        document.getElementById('totalResidents').textContent = totalResidents;
+        document.getElementById('totalStreets').textContent = streets;
+        document.getElementById('houseCount').textContent = `${total} household${total !== 1 ? 's' : ''}`;
+
+        document.getElementById('ownerCount').textContent =
+            this.households.filter(h => h.houseStatus === 'owner').length;
+        document.getElementById('renterCount').textContent =
+            this.households.filter(h => h.houseStatus === 'renter').length;
+        document.getElementById('vacantCount').textContent =
+            this.households.filter(h => h.houseStatus === 'vacant').length;
+        document.getElementById('businessCount').textContent =
+            this.households.filter(h => h.houseStatus === 'business').length;
+    }
+
+    // ─────────────────────────────────────────
+    // GEOLOCATION
+    // ─────────────────────────────────────────
     useCurrentLocation() {
         if (!navigator.geolocation) {
-            this.showToast('Geolocation is not supported by your browser.', 'error');
+            this.showToast('Geolocation not supported.', 'error');
             return;
         }
 
-        this.showToast('Getting your location...', 'success');
+        this.showToast('Detecting location...', 'success');
 
         navigator.geolocation.getCurrentPosition(
-            (position) => {
-                const { latitude, longitude } = position.coords;
+            (pos) => {
+                const { latitude, longitude } = pos.coords;
                 document.getElementById('latitude').value = latitude.toFixed(6);
                 document.getElementById('longitude').value = longitude.toFixed(6);
                 this.reverseGeocode(latitude, longitude);
-                this.showToast('Location detected!', 'success');
+                this.showToast('Location set!', 'success');
             },
-            (error) => {
-                this.showToast('Unable to get your location.', 'error');
-                console.error('Geolocation error:', error);
-            },
+            () => this.showToast('Unable to get location.', 'error'),
             { enableHighAccuracy: true }
         );
     }
 
-    // ---- REVERSE GEOCODE ----
     async reverseGeocode(lat, lng) {
         try {
-            const response = await fetch(
-                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
-                {
-                    headers: {
-                        'Accept-Language': 'en'
-                    }
-                }
+            const res = await fetch(
+                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18`,
+                { headers: { 'Accept-Language': 'en' } }
             );
-            const data = await response.json();
+            const data = await res.json();
             if (data.display_name) {
-                document.getElementById('address').value = data.display_name;
+                document.getElementById('fullAddress').value = data.display_name;
             }
-        } catch (error) {
-            console.error('Reverse geocoding failed:', error);
+        } catch (e) {
+            console.warn('Reverse geocoding failed:', e);
         }
     }
 
-    // ---- UTILITIES ----
+    // ─────────────────────────────────────────
+    // UTILITIES
+    // ─────────────────────────────────────────
     generateId() {
-        return 'person_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        return 'hh_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     }
 
-    getInitials(firstName, lastName) {
-        return (firstName.charAt(0) + lastName.charAt(0)).toUpperCase();
+    getInitials(first = '', last = '') {
+        return ((first.charAt(0) || '') + (last.charAt(0) || '')).toUpperCase() || '?';
     }
 
-    getCategoryColor(category) {
-        const colors = {
-            family: '#EC4899',
-            friend: '#3B82F6',
-            colleague: '#F59E0B',
-            client: '#10B981',
-            other: '#8B5CF6'
-        };
-        return colors[category] || colors.other;
+    getStatusIcon(status) {
+        const icons = { owner: 'home', renter: 'key', vacant: 'door-open', business: 'store' };
+        return icons[status] || 'home';
     }
 
-    updateCount() {
-        document.getElementById('personCount').textContent = `${this.people.length} ${this.people.length === 1 ? 'person' : 'people'}`;
+    getStatusLabel(status) {
+        const labels = { owner: 'Owner', renter: 'Renter', vacant: 'Vacant', business: 'Business' };
+        return labels[status] || status;
     }
 
-    // ---- TOAST NOTIFICATIONS ----
-    showToast(message, type = 'success') {
-        const container = document.getElementById('toastContainer');
-        const icons = {
-            success: 'fas fa-check-circle',
-            error: 'fas fa-exclamation-circle',
-            warning: 'fas fa-exclamation-triangle'
-        };
-
-        const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
-        toast.innerHTML = `
-            <i class="${icons[type]}"></i>
-            <span>${message}</span>
-        `;
-
-        container.appendChild(toast);
-
-        setTimeout(() => {
-            toast.style.opacity = '0';
-            toast.style.transform = 'translateX(100%)';
-            toast.style.transition = 'all 0.3s ease';
-            setTimeout(() => toast.remove(), 300);
-        }, 3000);
-    }
-
-    // ---- LOCAL STORAGE ----
+    // ─────────────────────────────────────────
+    // STORAGE
+    // ─────────────────────────────────────────
     saveToStorage() {
         try {
-            localStorage.setItem('personLocatorData', JSON.stringify(this.people));
+            localStorage.setItem('communityLocatorData', JSON.stringify(this.households));
         } catch (e) {
-            console.error('Failed to save to localStorage:', e);
-            this.showToast('Failed to save data. Storage might be full.', 'error');
+            this.showToast('Storage full! Cannot save.', 'error');
         }
     }
 
     loadFromStorage() {
         try {
-            const data = localStorage.getItem('personLocatorData');
+            const data = localStorage.getItem('communityLocatorData');
             return data ? JSON.parse(data) : [];
         } catch (e) {
-            console.error('Failed to load from localStorage:', e);
             return [];
         }
     }
+
+    // ─────────────────────────────────────────
+    // TOAST
+    // ─────────────────────────────────────────
+    showToast(message, type = 'success') {
+        const icons = {
+            success: 'fas fa-check-circle',
+            error: 'fas fa-times-circle',
+            warning: 'fas fa-exclamation-triangle'
+        };
+
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.innerHTML = `<i class="${icons[type]}"></i><span>${message}</span>`;
+
+        document.getElementById('toastContainer').appendChild(toast);
+
+        setTimeout(() => {
+            toast.style.cssText = 'opacity:0;transform:translateX(100%);transition:all 0.3s ease';
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    }
 }
 
-// ===========================
-// INITIALIZE APPLICATION
-// ===========================
+// ─────────────────────────────────────────
+// BOOT
+// ─────────────────────────────────────────
 let app;
 document.addEventListener('DOMContentLoaded', () => {
-    app = new PersonLocator();
+    // Inject detail actions container
+    const panel = document.getElementById('detailPanel');
+    const actionsDiv = document.createElement('div');
+    actionsDiv.className = 'detail-actions';
+    panel.appendChild(actionsDiv);
+
+    app = new CommunityLocator();
 });
