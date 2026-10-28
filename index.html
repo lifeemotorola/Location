@@ -1,9 +1,11 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en-LR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Community Locator Map</title>
+    <meta name="description" content="Liberia Community Locator — an offline-friendly household and resident directory for counties, districts and communities across Liberia.">
+    <meta name="theme-color" content="#4F46E5">
+    <title>Liberia Community Locator — Household &amp; Resident Directory</title>
 
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -12,7 +14,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
 
     <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="styles.css">
 </head>
@@ -21,60 +23,121 @@
     <!-- ========== HEADER ========== -->
     <header class="header">
         <div class="header-left">
-            <i class="fas fa-city logo-icon"></i>
+            <i class="fas fa-map-location-dot logo-icon" aria-hidden="true"></i>
             <div>
-                <h1>Community Locator</h1>
-                <span class="header-subtitle">Household & Resident Directory</span>
+                <h1>Liberia Community Locator</h1>
+                <span class="header-subtitle">Household &amp; resident directory · Republic of Liberia</span>
             </div>
         </div>
+
         <div class="header-center">
-            <div class="stat-pill">
-                <i class="fas fa-home"></i>
-                <span id="totalHouses">0</span> Houses
+            <div class="stat-pill" title="Households recorded">
+                <i class="fas fa-house-chimney" aria-hidden="true"></i>
+                <span id="totalHouses">0</span> Households
             </div>
-            <div class="stat-pill">
-                <i class="fas fa-users"></i>
+            <div class="stat-pill" title="People recorded">
+                <i class="fas fa-users" aria-hidden="true"></i>
                 <span id="totalResidents">0</span> Residents
             </div>
-            <div class="stat-pill">
-                <i class="fas fa-street-view"></i>
-                <span id="totalStreets">0</span> Streets
+            <div class="stat-pill" title="Counties covered">
+                <i class="fas fa-map" aria-hidden="true"></i>
+                <span id="totalCounties">0</span> Counties
             </div>
         </div>
+
         <div class="header-right">
             <div class="search-box">
-                <i class="fas fa-search"></i>
-                <input type="text" id="searchInput" placeholder="Search house, resident, street...">
+                <i class="fas fa-search" aria-hidden="true"></i>
+                <input type="text" id="searchInput" autocomplete="off"
+                       placeholder="Search name, phone, community..."
+                       aria-label="Search households and residents">
             </div>
+
+            <div class="menu-wrap">
+                <button class="btn btn-ghost" id="dataMenuBtn"
+                        aria-haspopup="true" aria-expanded="false" aria-controls="dataMenu">
+                    <i class="fas fa-database" aria-hidden="true"></i> Data
+                </button>
+                <div class="menu" id="dataMenu" role="menu" hidden>
+                    <div class="menu-label">Backup &amp; share</div>
+                    <button type="button" role="menuitem" data-cmd="export-csv">
+                        <i class="fas fa-file-csv" aria-hidden="true"></i>
+                        <span>Export CSV<small>Open in Excel or share with a supervisor</small></span>
+                    </button>
+                    <button type="button" role="menuitem" data-cmd="export-json">
+                        <i class="fas fa-file-code" aria-hidden="true"></i>
+                        <span>Export JSON backup<small>Full data, re-importable</small></span>
+                    </button>
+                    <button type="button" role="menuitem" data-cmd="import-json">
+                        <i class="fas fa-file-import" aria-hidden="true"></i>
+                        <span>Import JSON backup<small>Merge or replace records</small></span>
+                    </button>
+                    <button type="button" role="menuitem" data-cmd="summary">
+                        <i class="fas fa-chart-simple" aria-hidden="true"></i>
+                        <span>County summary (CSV)<small>Coverage and service indicators</small></span>
+                    </button>
+                    <button type="button" role="menuitem" data-cmd="print">
+                        <i class="fas fa-print" aria-hidden="true"></i>
+                        <span>Print directory<small>Current filtered list</small></span>
+                    </button>
+                    <div class="menu-sep" role="separator"></div>
+                    <button type="button" role="menuitem" data-cmd="demo">
+                        <i class="fas fa-flask" aria-hidden="true"></i>
+                        <span>Load demo households<small>Try the app with sample data</small></span>
+                    </button>
+                    <button type="button" role="menuitem" class="menu-danger" data-cmd="clear">
+                        <i class="fas fa-trash-can" aria-hidden="true"></i>
+                        <span>Delete all data<small>Cannot be undone</small></span>
+                    </button>
+                </div>
+                <input type="file" id="importFile" accept="application/json,.json" hidden>
+            </div>
+
             <button class="btn btn-primary" id="addHouseBtn">
-                <i class="fas fa-plus"></i> Add Household
+                <i class="fas fa-plus" aria-hidden="true"></i> Add Household
             </button>
         </div>
     </header>
+
+    <!-- ========== OFFLINE NOTICE ========== -->
+    <div class="offline-banner" id="offlineBanner" role="status" hidden>
+        <i class="fas fa-wifi" aria-hidden="true"></i>
+        <span><strong>Offline.</strong> Map tiles and place search are unavailable — records are still saved on this device.</span>
+    </div>
 
     <!-- ========== MAIN CONTENT ========== -->
     <div class="main-container">
 
         <!-- SIDEBAR -->
-        <aside class="sidebar" id="sidebar">
+        <aside class="sidebar" id="sidebar" aria-label="Household directory">
             <div class="sidebar-header">
-                <h2><i class="fas fa-house-user"></i> Households</h2>
+                <h2><i class="fas fa-house-user" aria-hidden="true"></i> Households</h2>
                 <span class="house-count" id="houseCount">0 households</span>
             </div>
 
             <!-- Filters -->
             <div class="sidebar-filters">
-                <select id="filterStatus">
-                    <option value="all">All Status</option>
-                    <option value="owner">Owner Occupied</option>
-                    <option value="renter">Renter</option>
+                <select id="filterCounty" aria-label="Filter by county">
+                    <option value="all">All counties</option>
+                </select>
+                <select id="filterDistrict" aria-label="Filter by district">
+                    <option value="all">All districts</option>
+                </select>
+                <select id="filterStatus" aria-label="Filter by occupancy status">
+                    <option value="all">All status</option>
+                    <option value="owner">Owner occupied</option>
+                    <option value="renter">Renter / tenant</option>
+                    <option value="caretaker">Caretaker / family</option>
                     <option value="vacant">Vacant</option>
                     <option value="business">Business</option>
                 </select>
-                <select id="filterStreet">
-                    <option value="all">All Streets</option>
+                <select id="filterStreet" aria-label="Filter by street">
+                    <option value="all">All streets</option>
                 </select>
             </div>
+            <button class="clear-filters" id="clearFiltersBtn" type="button">
+                <i class="fas fa-filter-circle-xmark" aria-hidden="true"></i> Clear filters
+            </button>
 
             <!-- Summary Cards -->
             <div class="summary-strip">
@@ -99,19 +162,62 @@
             <!-- House List -->
             <div class="house-list" id="houseList">
                 <div class="empty-state" id="emptyState">
-                    <i class="fas fa-home"></i>
+                    <i class="fas fa-house-chimney" aria-hidden="true"></i>
                     <p>No households recorded yet.</p>
-                    <p>Click on the map or use "Add Household" to get started.</p>
+                    <p>Click on the map or use “Add Household” to get started.</p>
+                    <button class="btn btn-secondary btn-sm" id="emptyDemoBtn" type="button">
+                        <i class="fas fa-flask" aria-hidden="true"></i> Load demo households
+                    </button>
                 </div>
+            </div>
+
+            <!-- Sidebar footer -->
+            <div class="sidebar-footer">
+                <span id="storageNote"><i class="fas fa-hard-drive" aria-hidden="true"></i> Saved in this browser only</span>
+                <button type="button" id="backupBtn"><i class="fas fa-download" aria-hidden="true"></i> Backup</button>
             </div>
         </aside>
 
         <!-- MAP -->
         <div class="map-wrapper">
             <div id="map"></div>
+
+            <!-- Map tools -->
+            <div class="map-tools">
+                <div class="place-search">
+                    <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
+                    <input type="text" id="placeSearch" autocomplete="off"
+                           placeholder="Find a street or town in Liberia…"
+                           aria-label="Search a place in Liberia">
+                    <button type="button" id="placeSearchClear" aria-label="Clear place search" hidden>
+                        <i class="fas fa-times" aria-hidden="true"></i>
+                    </button>
+                    <div class="place-results" id="placeResults" hidden></div>
+                </div>
+
+                <div class="map-tool-row">
+                    <select id="countyJump" aria-label="Jump the map to a county">
+                        <option value="">Jump to county…</option>
+                    </select>
+                </div>
+
+                <div class="map-tool-row map-tool-buttons">
+                    <button type="button" class="map-chip" id="locateMeBtn">
+                        <i class="fas fa-location-crosshairs" aria-hidden="true"></i> My location
+                    </button>
+                    <button type="button" class="map-chip" id="fitAllBtn">
+                        <i class="fas fa-expand" aria-hidden="true"></i> Fit all
+                    </button>
+                    <button type="button" class="map-chip" id="basemapBtn" aria-pressed="false">
+                        <i class="fas fa-layer-group" aria-hidden="true"></i>
+                        <span id="basemapLabel">Satellite</span>
+                    </button>
+                </div>
+            </div>
+
             <div class="map-instructions" id="mapInstructions">
-                <i class="fas fa-info-circle"></i>
-                Click anywhere on the map to register a household at that location
+                <i class="fas fa-circle-info" aria-hidden="true"></i>
+                Tap the map to register a household at that location
             </div>
 
             <!-- Map Legend -->
@@ -119,6 +225,7 @@
                 <div class="legend-title">Legend</div>
                 <div class="legend-item"><span class="legend-dot" style="background:#4F46E5"></span> Owner</div>
                 <div class="legend-item"><span class="legend-dot" style="background:#10B981"></span> Renter</div>
+                <div class="legend-item"><span class="legend-dot" style="background:#0EA5E9"></span> Caretaker</div>
                 <div class="legend-item"><span class="legend-dot" style="background:#F59E0B"></span> Vacant</div>
                 <div class="legend-item"><span class="legend-dot" style="background:#EC4899"></span> Business</div>
             </div>
@@ -127,108 +234,157 @@
 
     <!-- ========== ADD/EDIT HOUSEHOLD MODAL ========== -->
     <div class="modal-overlay" id="modalOverlay">
-        <div class="modal" id="houseModal">
+        <div class="modal" id="houseModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
             <div class="modal-header">
-                <h2 id="modalTitle"><i class="fas fa-home"></i> Register Household</h2>
-                <button class="modal-close" id="modalClose">&times;</button>
+                <h2 id="modalTitle"><i class="fas fa-house-chimney" aria-hidden="true"></i> Register Household</h2>
+                <button class="modal-close" id="modalClose" aria-label="Close form">&times;</button>
             </div>
 
-            <div class="modal-tabs">
-                <button class="tab-btn active" data-tab="house">
-                    <i class="fas fa-home"></i> House Info
+            <div class="modal-tabs" role="tablist">
+                <button type="button" class="tab-btn active" data-tab="house" role="tab" aria-selected="true">
+                    <i class="fas fa-house" aria-hidden="true"></i> House
                 </button>
-                <button class="tab-btn" data-tab="residents">
-                    <i class="fas fa-users"></i> Residents
+                <button type="button" class="tab-btn" data-tab="residents" role="tab" aria-selected="false">
+                    <i class="fas fa-users" aria-hidden="true"></i> Residents
                 </button>
-                <button class="tab-btn" data-tab="location">
-                    <i class="fas fa-map-pin"></i> Location
+                <button type="button" class="tab-btn" data-tab="location" role="tab" aria-selected="false">
+                    <i class="fas fa-map-pin" aria-hidden="true"></i> Location
                 </button>
-                <button class="tab-btn" data-tab="others">
-                    <i class="fas fa-clipboard-list"></i> Others
+                <button type="button" class="tab-btn" data-tab="services" role="tab" aria-selected="false">
+                    <i class="fas fa-hand-holding-droplet" aria-hidden="true"></i> Services
                 </button>
             </div>
 
-            <form id="houseForm">
+            <form id="houseForm" novalidate>
                 <div class="modal-body">
 
                     <!-- TAB 1: HOUSE INFO -->
                     <div class="tab-content active" id="tab-house">
                         <div class="form-section">
-                            <h3><i class="fas fa-door-open"></i> House Identification</h3>
+                            <h3><i class="fas fa-door-open" aria-hidden="true"></i> House identification</h3>
                             <div class="form-row">
                                 <div class="form-group">
-                                    <label for="houseNumber">House / Unit Number *</label>
-                                    <input type="text" id="houseNumber" required placeholder="e.g. 123, Unit 4B">
+                                    <label for="houseNumber">House / structure ID *</label>
+                                    <input type="text" id="houseNumber" required
+                                           placeholder="e.g. MTC-0231, House 14">
                                 </div>
                                 <div class="form-group">
-                                    <label for="houseLot">Lot Number</label>
-                                    <input type="text" id="houseLot" placeholder="e.g. Lot 7">
+                                    <label for="houseLot">Plot / lot number</label>
+                                    <input type="text" id="houseLot" placeholder="e.g. Plot 14">
                                 </div>
                             </div>
                             <div class="form-row">
                                 <div class="form-group">
-                                    <label for="houseBlock">Block Number</label>
-                                    <input type="text" id="houseBlock" placeholder="e.g. Block 2">
+                                    <label for="houseBlock">Block / zone number</label>
+                                    <input type="text" id="houseBlock" placeholder="e.g. Block C">
                                 </div>
                                 <div class="form-group">
-                                    <label for="houseStreet">Street Name *</label>
-                                    <input type="text" id="houseStreet" required placeholder="e.g. Mabini St.">
-                                </div>
-                            </div>
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label for="houseBarangay">Barangay / District</label>
-                                    <input type="text" id="houseBarangay" placeholder="e.g. Barangay 1">
-                                </div>
-                                <div class="form-group">
-                                    <label for="houseMunicipality">Municipality / City</label>
-                                    <input type="text" id="houseMunicipality" placeholder="e.g. Quezon City">
+                                    <label for="houseStreet">Street name</label>
+                                    <input type="text" id="houseStreet" list="streetList"
+                                           placeholder="e.g. Randall Street, Duport Road">
                                 </div>
                             </div>
                         </div>
 
                         <div class="form-section">
-                            <h3><i class="fas fa-building"></i> House Details</h3>
+                            <h3><i class="fas fa-map-location-dot" aria-hidden="true"></i> Location in Liberia</h3>
                             <div class="form-row">
                                 <div class="form-group">
-                                    <label for="houseType">House Type</label>
+                                    <label for="houseCounty">County *</label>
+                                    <select id="houseCounty" required>
+                                        <option value="">Select county…</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="houseDistrict">District</label>
+                                    <input type="text" id="houseDistrict" list="districtList"
+                                           placeholder="e.g. Greater Monrovia">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="houseCommunity">Community / quarter / town</label>
+                                    <input type="text" id="houseCommunity" list="communityList"
+                                           placeholder="e.g. Sinkor, West Point, Gbarnga">
+                                </div>
+                                <div class="form-group">
+                                    <label for="houseClan">Clan <span class="label-hint">(rural areas)</span></label>
+                                    <input type="text" id="houseClan" placeholder="e.g. Kpelleh Clan">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-section">
+                            <h3><i class="fas fa-building" aria-hidden="true"></i> Structure details</h3>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="houseType">Structure type</label>
                                     <select id="houseType">
-                                        <option value="single">Single Family</option>
-                                        <option value="duplex">Duplex</option>
-                                        <option value="apartment">Apartment / Condo</option>
-                                        <option value="townhouse">Townhouse</option>
-                                        <option value="bungalow">Bungalow</option>
-                                        <option value="commercial">Commercial / Business</option>
+                                        <option value="concrete_bungalow">Concrete block — bungalow</option>
+                                        <option value="concrete_storey">Concrete block — storey building</option>
+                                        <option value="mud_house">Mud / brick “country” house</option>
+                                        <option value="zinc_shack">Zinc / makeshift structure</option>
+                                        <option value="compound">Compound (several households)</option>
+                                        <option value="apartment">Apartment / flat</option>
+                                        <option value="commercial">Commercial / business</option>
                                         <option value="other">Other</option>
                                     </select>
                                 </div>
                                 <div class="form-group">
-                                    <label for="houseStatus">Occupancy Status *</label>
+                                    <label for="houseStatus">Occupancy status *</label>
                                     <select id="houseStatus" required>
-                                        <option value="owner">Owner Occupied</option>
-                                        <option value="renter">Renter / Tenant</option>
+                                        <option value="owner">Owner occupied</option>
+                                        <option value="renter">Renter / tenant</option>
+                                        <option value="caretaker">Caretaker / family house</option>
                                         <option value="vacant">Vacant</option>
-                                        <option value="business">Business</option>
+                                        <option value="business">Business / commercial</option>
                                     </select>
                                 </div>
                             </div>
                             <div class="form-row">
                                 <div class="form-group">
-                                    <label for="yearBuilt">Year Built</label>
-                                    <input type="number" id="yearBuilt" placeholder="e.g. 1998" min="1800" max="2100">
+                                    <label for="wallMaterial">Wall material</label>
+                                    <select id="wallMaterial">
+                                        <option value="concrete_block">Concrete block</option>
+                                        <option value="mud_brick">Mud / brick</option>
+                                        <option value="wood_zinc">Wood / zinc</option>
+                                        <option value="stone">Stone</option>
+                                        <option value="other">Other</option>
+                                    </select>
                                 </div>
                                 <div class="form-group">
-                                    <label for="houseColor">House Color</label>
-                                    <input type="text" id="houseColor" placeholder="e.g. White with blue trim">
+                                    <label for="roofMaterial">Roof material</label>
+                                    <select id="roofMaterial">
+                                        <option value="zinc">Zinc / metal sheet</option>
+                                        <option value="thatch">Thatch / palm</option>
+                                        <option value="concrete_tile">Concrete / tile</option>
+                                        <option value="asbestos">Asbestos</option>
+                                        <option value="other">Other</option>
+                                    </select>
                                 </div>
                             </div>
                             <div class="form-row">
                                 <div class="form-group">
-                                    <label for="floorCount">Number of Floors</label>
-                                    <input type="number" id="floorCount" placeholder="e.g. 2" min="1" max="100">
+                                    <label for="structureCondition">Structure condition</label>
+                                    <select id="structureCondition">
+                                        <option value="good">Good</option>
+                                        <option value="fair">Fair</option>
+                                        <option value="poor">Poor</option>
+                                        <option value="dilapidated">Dilapidated</option>
+                                    </select>
                                 </div>
                                 <div class="form-group">
-                                    <label for="roomCount">Number of Rooms</label>
+                                    <label for="yearBuilt">Year built</label>
+                                    <input type="number" id="yearBuilt" placeholder="e.g. 1998" min="1800" max="2100">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="floorCount">Floors</label>
+                                    <input type="number" id="floorCount" placeholder="e.g. 2" min="1" max="50">
+                                </div>
+                                <div class="form-group">
+                                    <label for="roomCount">Rooms</label>
                                     <input type="number" id="roomCount" placeholder="e.g. 4" min="1">
                                 </div>
                             </div>
@@ -238,73 +394,85 @@
                     <!-- TAB 2: RESIDENTS -->
                     <div class="tab-content" id="tab-residents">
 
-                        <!-- Household Head -->
                         <div class="form-section">
-                            <h3><i class="fas fa-user-tie"></i> Household Head</h3>
+                            <h3><i class="fas fa-user-tie" aria-hidden="true"></i> Household head</h3>
                             <div class="form-row">
                                 <div class="form-group">
-                                    <label for="headFirstName">First Name *</label>
-                                    <input type="text" id="headFirstName" required placeholder="Juan">
+                                    <label for="headFirstName">First name *</label>
+                                    <input type="text" id="headFirstName" required placeholder="e.g. Emmanuel">
                                 </div>
                                 <div class="form-group">
-                                    <label for="headLastName">Last Name *</label>
-                                    <input type="text" id="headLastName" required placeholder="Dela Cruz">
+                                    <label for="headLastName">Last name *</label>
+                                    <input type="text" id="headLastName" required placeholder="e.g. Kollie">
                                 </div>
                             </div>
                             <div class="form-row">
                                 <div class="form-group">
                                     <label for="headAge">Age</label>
-                                    <input type="number" id="headAge" placeholder="45" min="0" max="150">
+                                    <input type="number" id="headAge" placeholder="e.g. 45" min="0" max="150">
                                 </div>
                                 <div class="form-group">
-                                    <label for="headGender">Gender</label>
+                                    <label for="headGender">Sex</label>
                                     <select id="headGender">
                                         <option value="male">Male</option>
                                         <option value="female">Female</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="headCivilStatus">Marital status</label>
+                                    <select id="headCivilStatus">
+                                        <option value="married">Married</option>
+                                        <option value="cohabiting">Cohabiting / partner</option>
+                                        <option value="single">Single</option>
+                                        <option value="widowed">Widowed</option>
+                                        <option value="divorced">Divorced / separated</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="headNationality">Nationality</label>
+                                    <select id="headNationality">
+                                        <option value="liberian">Liberian</option>
+                                        <option value="sierra_leonean">Sierra Leonean</option>
+                                        <option value="guinean">Guinean</option>
+                                        <option value="ivorian">Ivorian</option>
+                                        <option value="ecowas_other">Other ECOWAS</option>
                                         <option value="other">Other</option>
                                     </select>
                                 </div>
                             </div>
                             <div class="form-row">
                                 <div class="form-group">
-                                    <label for="headCivilStatus">Civil Status</label>
-                                    <select id="headCivilStatus">
-                                        <option value="married">Married</option>
-                                        <option value="single">Single</option>
-                                        <option value="widowed">Widowed</option>
-                                        <option value="separated">Separated</option>
-                                    </select>
+                                    <label for="headOccupation">Main livelihood</label>
+                                    <input type="text" id="headOccupation" list="occupationList"
+                                           placeholder="e.g. Farmer, market trader">
                                 </div>
                                 <div class="form-group">
-                                    <label for="headOccupation">Occupation</label>
-                                    <input type="text" id="headOccupation" placeholder="e.g. Farmer, Teacher">
+                                    <label for="headContact">Mobile number</label>
+                                    <input type="tel" id="headContact" inputmode="tel"
+                                           placeholder="+231 77 123 4567" autocomplete="off">
+                                    <span class="field-hint" id="phoneHint">Liberian numbers: 077, 088, 055 or +231…</span>
                                 </div>
                             </div>
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label for="headContact">Contact Number</label>
-                                    <input type="tel" id="headContact" placeholder="+63 912 345 6789">
-                                </div>
-                                <div class="form-group">
-                                    <label for="headEmail">Email (optional)</label>
-                                    <input type="email" id="headEmail" placeholder="juan@example.com">
-                                </div>
+                            <div class="form-group">
+                                <label for="headEmail">Email <span class="label-hint">(optional)</span></label>
+                                <input type="email" id="headEmail" placeholder="name@example.com">
                             </div>
                         </div>
 
-                        <!-- Household Members -->
                         <div class="form-section">
                             <h3>
-                                <i class="fas fa-users"></i> Household Members
-                                <button type="button" class="btn btn-primary btn-sm" id="addMemberBtn" style="margin-left:auto">
-                                    <i class="fas fa-plus"></i> Add Member
+                                <i class="fas fa-users" aria-hidden="true"></i> Household members
+                                <button type="button" class="btn btn-primary-dark btn-sm" id="addMemberBtn" style="margin-left:auto">
+                                    <i class="fas fa-plus" aria-hidden="true"></i> Add member
                                 </button>
                             </h3>
 
                             <div class="members-summary-row">
                                 <div class="member-stat">
                                     <input type="number" id="totalPersons" min="1" placeholder="0">
-                                    <label>Total Persons</label>
+                                    <label>Total persons</label>
                                 </div>
                                 <div class="member-stat">
                                     <input type="number" id="totalMale" min="0" placeholder="0">
@@ -316,206 +484,283 @@
                                 </div>
                                 <div class="member-stat">
                                     <input type="number" id="totalMinors" min="0" placeholder="0">
-                                    <label>Minors (0-17)</label>
+                                    <label>Under 18</label>
                                 </div>
                                 <div class="member-stat">
                                     <input type="number" id="totalSenior" min="0" placeholder="0">
-                                    <label>Senior (60+)</label>
+                                    <label>60+</label>
                                 </div>
                                 <div class="member-stat">
                                     <input type="number" id="totalPwd" min="0" placeholder="0">
-                                    <label>PWD</label>
+                                    <label>With disability</label>
                                 </div>
                             </div>
 
-                            <!-- Individual Member List -->
                             <div id="membersList" class="members-list">
                                 <!-- Members added dynamically -->
                             </div>
+                            <p class="form-note">
+                                <i class="fas fa-circle-info" aria-hidden="true"></i>
+                                List only people who live in the household. Counts above stay separate so
+                                health and social teams can plan for vulnerable groups.
+                            </p>
                         </div>
                     </div>
 
                     <!-- TAB 3: LOCATION -->
-<div class="tab-content" id="tab-location">
+                    <div class="tab-content" id="tab-location">
 
-    <!-- Coordinate Status Display -->
-    <div id="coordinateDisplay" class="coordinate-display">
-        <i class="fas fa-exclamation-circle" style="color:var(--warning)"></i>
-        No location set. Click on the map or use the buttons below.
-    </div>
+                        <div id="coordinateDisplay" class="coordinate-display">
+                            <i class="fas fa-circle-exclamation" style="color:var(--warning)" aria-hidden="true"></i>
+                            No location set. Tap the map or use the buttons below.
+                        </div>
 
-    <div class="form-section">
-        <h3><i class="fas fa-map-marker-alt"></i> GPS Coordinates</h3>
-        <div class="form-row">
-            <div class="form-group">
-                <label for="latitude">Latitude *</label>
-                <input type="number" id="latitude" step="any"
-                    required placeholder="14.5995">
-            </div>
-            <div class="form-group">
-                <label for="longitude">Longitude *</label>
-                <input type="number" id="longitude" step="any"
-                    required placeholder="120.9842">
-            </div>
-        </div>
-        <div class="form-group">
-            <label for="fullAddress">Full Address</label>
-            <input type="text" id="fullAddress"
-                placeholder="Auto-filled when location is set...">
-        </div>
-        <div class="form-group">
-            <label for="landmark">Nearest Landmark</label>
-            <input type="text" id="landmark"
-                placeholder="e.g. Near the church, beside the market">
-        </div>
-
-        <!-- Location Action Buttons -->
-        <div class="location-btn-group">
-            <button type="button" class="btn btn-secondary btn-sm"
-                    id="useCurrentLocation">
-                <i class="fas fa-crosshairs"></i> Use My Current Location
-            </button>
-            <button type="button" class="btn btn-secondary btn-sm"
-                    id="pickFromMap">
-                <i class="fas fa-map-pin"></i> Pick from Map
-            </button>
-        </div>
-    </div>
-
-    <div class="form-section">
-        <h3><i class="fas fa-map"></i> Zone / Purok</h3>
-        <div class="form-row">
-            <div class="form-group">
-                <label for="zone">Zone / Purok</label>
-                <input type="text" id="zone"
-                    placeholder="e.g. Zone 1, Purok Narra">
-            </div>
-            <div class="form-group">
-                <label for="precinct">Precinct Number</label>
-                <input type="text" id="precinct"
-                    placeholder="e.g. Precinct 001A">
-            </div>
-        </div>
-    </div>
-</div>
-
-                    <!-- TAB 4: OTHER INFO -->
-                    <div class="tab-content" id="tab-others">
                         <div class="form-section">
-                            <h3><i class="fas fa-hand-holding-heart"></i> Social & Economic</h3>
+                            <h3><i class="fas fa-map-marker-alt" aria-hidden="true"></i> GPS coordinates</h3>
                             <div class="form-row">
                                 <div class="form-group">
-                                    <label for="incomeClass">Income Classification</label>
+                                    <label for="latitude">Latitude *</label>
+                                    <input type="number" id="latitude" step="any" required
+                                           placeholder="6.315600">
+                                </div>
+                                <div class="form-group">
+                                    <label for="longitude">Longitude *</label>
+                                    <input type="number" id="longitude" step="any" required
+                                           placeholder="-10.807400">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="fullAddress">Full address <span class="label-hint">(auto-filled from map)</span></label>
+                                <input type="text" id="fullAddress" placeholder="Auto-filled when a location is set…">
+                            </div>
+                            <div class="form-group">
+                                <label for="landmark">Nearest landmark</label>
+                                <input type="text" id="landmark"
+                                       placeholder="e.g. Opposite the mosque, behind Total filling station">
+                                <span class="field-hint">Landmarks matter in Liberia — they make an address findable.</span>
+                            </div>
+
+                            <div class="location-btn-group">
+                                <button type="button" class="btn btn-secondary btn-sm" id="useCurrentLocation">
+                                    <i class="fas fa-location-crosshairs" aria-hidden="true"></i> Use my current location
+                                </button>
+                                <button type="button" class="btn btn-secondary btn-sm" id="pickFromMap">
+                                    <i class="fas fa-map-pin" aria-hidden="true"></i> Pick from map
+                                </button>
+                                <button type="button" class="btn btn-secondary btn-sm" id="copyCoordsBtn">
+                                    <i class="fas fa-copy" aria-hidden="true"></i> Copy coordinates
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="form-section">
+                            <h3><i class="fas fa-draw-polygon" aria-hidden="true"></i> Zone &amp; enumeration area</h3>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="zone">Zone / enumeration area</label>
+                                    <input type="text" id="zone" placeholder="e.g. Zone 3, Clara Town">
+                                </div>
+                                <div class="form-group">
+                                    <label for="enumArea">Enumeration area code</label>
+                                    <input type="text" id="enumArea" placeholder="e.g. LR-MO-014">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB 4: SERVICES & SURVEY -->
+                    <div class="tab-content" id="tab-services">
+                        <div class="form-section">
+                            <h3><i class="fas fa-hand-holding-heart" aria-hidden="true"></i> Social &amp; economic</h3>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="incomeClass">Welfare classification</label>
                                     <select id="incomeClass">
-                                        <option value="">Select...</option>
-                                        <option value="4ps">4Ps Beneficiary</option>
-                                        <option value="low">Low Income</option>
-                                        <option value="middle">Middle Income</option>
-                                        <option value="high">High Income</option>
+                                        <option value="">Select…</option>
+                                        <option value="extreme_poor">Extreme poor</option>
+                                        <option value="poor">Poor</option>
+                                        <option value="non_poor">Non-poor</option>
+                                        <option value="sct">Social Cash Transfer beneficiary</option>
+                                        <option value="not_stated">Not stated</option>
                                     </select>
                                 </div>
                                 <div class="form-group">
-                                    <label for="waterSource">Water Source</label>
-                                    <select id="waterSource">
-                                        <option value="">Select...</option>
-                                        <option value="piped">Piped Water (LWUA)</option>
-                                        <option value="well">Deep Well</option>
-                                        <option value="spring">Spring</option>
-                                        <option value="rain">Rainwater</option>
-                                        <option value="bought">Bought / Delivered</option>
+                                    <label for="mobileMoney">Mobile money account</label>
+                                    <select id="mobileMoney">
+                                        <option value="">Select…</option>
+                                        <option value="mtn_momo">MTN MoMo</option>
+                                        <option value="orange_money">Orange Money</option>
+                                        <option value="both">Both</option>
+                                        <option value="none">None</option>
                                     </select>
                                 </div>
                             </div>
                             <div class="form-row">
                                 <div class="form-group">
+                                    <label for="waterSource">Main drinking water source</label>
+                                    <select id="waterSource">
+                                        <option value="">Select…</option>
+                                        <option value="lwsc_piped">LWSC piped water</option>
+                                        <option value="kiosk">Public kiosk / standpipe</option>
+                                        <option value="handpump">Hand pump / borehole</option>
+                                        <option value="protected_well">Protected well</option>
+                                        <option value="unprotected_well">Unprotected well</option>
+                                        <option value="spring">Spring</option>
+                                        <option value="river_creek">River / creek</option>
+                                        <option value="rainwater">Rainwater</option>
+                                        <option value="sachet_bottled">Sachet / bottled water</option>
+                                        <option value="truck">Water truck</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
                                     <label for="electricitySource">Electricity</label>
                                     <select id="electricitySource">
-                                        <option value="">Select...</option>
-                                        <option value="meralco">Grid Connected</option>
-                                        <option value="solar">Solar</option>
+                                        <option value="">Select…</option>
+                                        <option value="lec_grid">LEC grid</option>
+                                        <option value="minigrid">Community mini-grid</option>
+                                        <option value="solar">Solar home system</option>
                                         <option value="generator">Generator</option>
                                         <option value="none">None</option>
                                     </select>
                                 </div>
+                            </div>
+                            <div class="form-row">
                                 <div class="form-group">
-                                    <label for="internetAccess">Internet Access</label>
+                                    <label for="cookingFuel">Main cooking fuel</label>
+                                    <select id="cookingFuel">
+                                        <option value="">Select…</option>
+                                        <option value="charcoal">Charcoal</option>
+                                        <option value="firewood">Firewood</option>
+                                        <option value="lpg">LPG / gas</option>
+                                        <option value="kerosene">Kerosene</option>
+                                        <option value="electricity">Electricity</option>
+                                        <option value="none">None / shared</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="internetAccess">Internet access</label>
                                     <select id="internetAccess">
-                                        <option value="">Select...</option>
-                                        <option value="yes">Yes</option>
-                                        <option value="no">No</option>
-                                        <option value="mobile">Mobile Data Only</option>
+                                        <option value="">Select…</option>
+                                        <option value="home">Home broadband / Wi-Fi</option>
+                                        <option value="mobile">Mobile data only</option>
+                                        <option value="none">No access</option>
                                     </select>
                                 </div>
                             </div>
                         </div>
 
                         <div class="form-section">
-                            <h3><i class="fas fa-medkit"></i> Health & Safety</h3>
+                            <h3><i class="fas fa-kit-medical" aria-hidden="true"></i> Health, sanitation &amp; safety</h3>
                             <div class="form-row">
                                 <div class="form-group">
-                                    <label for="toiletType">Toilet Facility</label>
+                                    <label for="toiletType">Toilet facility</label>
                                     <select id="toiletType">
-                                        <option value="">Select...</option>
-                                        <option value="flush">Flush Toilet</option>
-                                        <option value="pit">Pit Latrine</option>
-                                        <option value="none">None / Open Defecation</option>
+                                        <option value="">Select…</option>
+                                        <option value="flush">Flush toilet</option>
+                                        <option value="vip">VIP latrine</option>
+                                        <option value="pit">Pit latrine</option>
+                                        <option value="shared">Shared / public latrine</option>
+                                        <option value="none">None / open defecation</option>
                                     </select>
                                 </div>
                                 <div class="form-group">
-                                    <label for="wasteDisposal">Waste Disposal</label>
+                                    <label for="wasteDisposal">Waste disposal</label>
                                     <select id="wasteDisposal">
-                                        <option value="">Select...</option>
-                                        <option value="collected">Collected by LGU</option>
+                                        <option value="">Select…</option>
+                                        <option value="mcc">City corporation collection</option>
+                                        <option value="community_bin">Community dumpster</option>
                                         <option value="burned">Burned</option>
+                                        <option value="buried">Buried</option>
+                                        <option value="open_dump">Open dumping</option>
                                         <option value="composting">Composting</option>
-                                        <option value="dumped">Open Dumping</option>
                                     </select>
                                 </div>
                             </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="nearestClinic">Nearest health facility</label>
+                                    <input type="text" id="nearestClinic" list="clinicList"
+                                           placeholder="e.g. JFK Memorial Hospital">
+                                </div>
+                                <div class="form-group">
+                                    <label for="clinicDistance">Distance to facility (km)</label>
+                                    <input type="number" id="clinicDistance" step="0.1" min="0" max="500"
+                                           placeholder="e.g. 2.5">
+                                </div>
+                            </div>
                             <div class="form-group">
-                                <label>Health Programs Enrolled</label>
+                                <label>Health &amp; social programs</label>
                                 <div class="checkbox-group">
                                     <label class="checkbox-label">
-                                        <input type="checkbox" name="healthProgram" value="philhealth"> PhilHealth
+                                        <input type="checkbox" name="healthProgram" value="nhis"> NHIS
                                     </label>
                                     <label class="checkbox-label">
-                                        <input type="checkbox" name="healthProgram" value="pcso"> PCSO
+                                        <input type="checkbox" name="healthProgram" value="fhci"> Free health care (FHCI)
                                     </label>
                                     <label class="checkbox-label">
-                                        <input type="checkbox" name="healthProgram" value="dswd"> DSWD
+                                        <input type="checkbox" name="healthProgram" value="epi"> Immunization (EPI)
                                     </label>
                                     <label class="checkbox-label">
-                                        <input type="checkbox" name="healthProgram" value="nhts"> NHTS
+                                        <input type="checkbox" name="healthProgram" value="hiv_tb"> HIV / TB care
+                                    </label>
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" name="healthProgram" value="nutrition"> Nutrition
+                                    </label>
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" name="healthProgram" value="sct"> Social Cash Transfer
+                                    </label>
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" name="healthProgram" value="nasscorp"> NASSCORP
+                                    </label>
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" name="healthProgram" value="disability"> Disability support
+                                    </label>
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" name="healthProgram" value="vsla"> VSLA / susu savings
+                                    </label>
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" name="healthProgram" value="malaria"> Malaria / bed nets
                                     </label>
                                 </div>
                             </div>
                         </div>
 
                         <div class="form-section">
-                            <h3><i class="fas fa-sticky-note"></i> Remarks</h3>
-                            <div class="form-group">
-                                <textarea id="remarks" rows="3"
-                                    placeholder="Additional notes, observations, special concerns..."></textarea>
-                            </div>
+                            <h3><i class="fas fa-clipboard-check" aria-hidden="true"></i> Survey information</h3>
                             <div class="form-row">
                                 <div class="form-group">
-                                    <label for="surveyedBy">Surveyed By</label>
+                                    <label for="surveyedBy">Enumerated by</label>
                                     <input type="text" id="surveyedBy" placeholder="Name of community worker">
                                 </div>
                                 <div class="form-group">
-                                    <label for="surveyDate">Survey Date</label>
+                                    <label for="surveyDate">Survey date</label>
                                     <input type="date" id="surveyDate">
                                 </div>
                             </div>
+                            <div class="form-group">
+                                <label for="remarks">Remarks</label>
+                                <textarea id="remarks" rows="3"
+                                          placeholder="Additional notes, observations, follow-up needs…"></textarea>
+                            </div>
+                            <label class="checkbox-label consent-label">
+                                <input type="checkbox" id="consent">
+                                Head of household agreed to share this information
+                            </label>
+                            <p class="form-note">
+                                <i class="fas fa-shield-halved" aria-hidden="true"></i>
+                                Only record what the household agreed to share. All data stays in this browser —
+                                export a backup before clearing your browser data.
+                            </p>
                         </div>
                     </div>
 
                 </div>
 
                 <div class="modal-footer">
+                    <span class="footer-hint" id="formHint">Fields marked * are required</span>
                     <button type="button" class="btn btn-secondary" id="cancelBtn">Cancel</button>
-                    <button type="submit" class="btn btn-primary" id="saveBtn">
-                        <i class="fas fa-save"></i> Save Household
+                    <button type="submit" class="btn btn-primary-dark" id="saveBtn">
+                        <i class="fas fa-floppy-disk" aria-hidden="true"></i> Save household
                     </button>
                 </div>
             </form>
@@ -523,11 +768,11 @@
     </div>
 
     <!-- ========== DETAIL PANEL ========== -->
-    <div class="detail-panel" id="detailPanel">
+    <div class="detail-panel" id="detailPanel" role="dialog" aria-modal="false" aria-labelledby="detailTitle">
         <div class="detail-header">
-            <h3 id="detailTitle">Household Details</h3>
-            <button class="btn-icon" id="closeDetail">
-                <i class="fas fa-times"></i>
+            <h3 id="detailTitle">Household details</h3>
+            <button class="btn-icon" id="closeDetail" aria-label="Close details">
+                <i class="fas fa-times" aria-hidden="true"></i>
             </button>
         </div>
         <div class="detail-content" id="detailContent"></div>
@@ -536,22 +781,75 @@
     <!-- ========== MEMBER ROW TEMPLATE ========== -->
     <template id="memberRowTemplate">
         <div class="member-row">
-            <input type="text" placeholder="First Name" class="member-firstname">
-            <input type="text" placeholder="Last Name" class="member-lastname">
-            <input type="number" placeholder="Age" class="member-age" min="0" max="150">
-            <select class="member-gender">
+            <input type="text" placeholder="First name" class="member-firstname" aria-label="Member first name">
+            <input type="text" placeholder="Last name" class="member-lastname" aria-label="Member last name">
+            <input type="number" placeholder="Age" class="member-age" min="0" max="150" aria-label="Member age">
+            <select class="member-gender" aria-label="Member sex">
                 <option value="male">Male</option>
                 <option value="female">Female</option>
             </select>
-            <input type="text" placeholder="Relationship to Head" class="member-relation">
-            <button type="button" class="btn-remove-member">
-                <i class="fas fa-times"></i>
+            <input type="text" placeholder="Relationship" class="member-relation" list="relationList"
+                   aria-label="Relationship to household head">
+            <button type="button" class="btn-remove-member" aria-label="Remove member">
+                <i class="fas fa-times" aria-hidden="true"></i>
             </button>
         </div>
     </template>
 
+    <!-- ========== DATALISTS (Liberia suggestions) ========== -->
+    <datalist id="streetList"></datalist>
+    <datalist id="districtList"></datalist>
+    <datalist id="communityList"></datalist>
+    <datalist id="occupationList">
+        <option value="Farmer"></option>
+        <option value="Market trader"></option>
+        <option value="Small shop / provisions"></option>
+        <option value="Teacher"></option>
+        <option value="Nurse / midwife"></option>
+        <option value="Driver"></option>
+        <option value="Kehkeh / taxi driver"></option>
+        <option value="Motorcycle (pen-pen) rider"></option>
+        <option value="Fisher"></option>
+        <option value="Civil servant"></option>
+        <option value="Security guard"></option>
+        <option value="Mason / carpenter"></option>
+        <option value="Tailor / seamstress"></option>
+        <option value="Student"></option>
+        <option value="Unemployed"></option>
+    </datalist>
+    <datalist id="relationList">
+        <option value="Spouse"></option>
+        <option value="Child"></option>
+        <option value="Parent"></option>
+        <option value="Sibling"></option>
+        <option value="Grandchild"></option>
+        <option value="Niece / nephew"></option>
+        <option value="Ward / foster child"></option>
+        <option value="Other relative"></option>
+        <option value="Non-relative"></option>
+    </datalist>
+    <datalist id="clinicList">
+        <option value="JFK Memorial Hospital (Monrovia)"></option>
+        <option value="Redemption Hospital (New Kru Town)"></option>
+        <option value="ELWA Hospital (Paynesville)"></option>
+        <option value="St. Joseph Catholic Hospital (Monrovia)"></option>
+        <option value="Phebe Hospital (Bong County)"></option>
+        <option value="Buchanan Government Hospital"></option>
+        <option value="Sanniquellie Central Hospital"></option>
+        <option value="Community clinic / health center"></option>
+    </datalist>
+
+    <!-- ========== PRINTABLE RECORD ========== -->
+    <div id="printArea" class="print-area"></div>
+
+    <noscript>
+        <div class="noscript-note">
+            This directory needs JavaScript. Enable it in your browser, then reload the page.
+        </div>
+    </noscript>
+
     <!-- ========== TOAST ========== -->
-    <div class="toast-container" id="toastContainer"></div>
+    <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
