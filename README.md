@@ -1,14 +1,28 @@
 # 📍 Liberia Community Locator
 
 A browser-based household and resident directory built for community enumeration
-in **Liberia** — no server, no build step, no account. Enumerators tap a point on
-the map, record a household, and the data stays on the device until it is
-exported as CSV or JSON.
+in **Liberia** — no build step, no framework. Enumerators tap a point on the map,
+record a household, and keep working with no signal at all.
+
+It runs in two modes, sharing the same interface:
+
+- **On this device (default).** Everything stays in the browser. Open
+  `index.html` from a laptop, a phone or a USB stick; export CSV or JSON.
+- **Shared team mode.** A static site on **GitHub Pages**, a small
+  **Cloudflare Worker** for accounts and sync, and **MongoDB Atlas** for the
+  records. Offline edits queue on the phone and upload when a connection
+  returns, so two enumerators never overwrite each other by accident.
+
+See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the full setup runbook and
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for how the pieces fit together.
 
 ![HTML5](https://img.shields.io/badge/HTML5-E34F26?logo=html5&logoColor=white)
 ![CSS3](https://img.shields.io/badge/CSS3-1572B6?logo=css3&logoColor=white)
 ![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?logo=javascript&logoColor=black)
 ![Leaflet](https://img.shields.io/badge/Leaflet-1.9.4-199900?logo=leaflet&logoColor=white)
+![GitHub Pages](https://img.shields.io/badge/hosted%20on-GitHub%20Pages-222?logo=github)
+![Cloudflare Workers](https://img.shields.io/badge/API-Cloudflare%20Workers-F38020?logo=cloudflare&logoColor=white)
+![MongoDB Atlas](https://img.shields.io/badge/database-MongoDB%20Atlas-47A248?logo=mongodb&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
 ---
@@ -21,8 +35,8 @@ records the Liberian administrative hierarchy (**county → district → communi
 clan**), and produces data that can be handed to a supervisor as a CSV at the end
 of the day.
 
-It is a static site: `index.html`, `styles.css`, `app.js`. Open it from a laptop,
-a phone, or a USB stick — no installation and no database.
+It is a static site: `index.html`, `styles.css`, `app.js` and `js/`. Open it from
+a laptop, a phone, or a USB stick — no installation and no database required.
 
 ---
 
@@ -68,6 +82,8 @@ a phone, or a USB stick — no installation and no database.
 - **Load 10 demo households** to explore the app, and clear them any time
 - Delete-all requires typing `DELETE`
 - Storage stays in `localStorage`; the sidebar shows how much space is used
+- **Optional shared backend:** sign-in, roles, and a sync queue that uploads
+  offline edits to MongoDB when the connection returns
 
 ### 📱 Working in the field
 - Responsive layout: sidebar + map on desktop, stacked with a full-screen detail
@@ -76,6 +92,50 @@ a phone, or a USB stick — no installation and no database.
 - Shortcuts: `Ctrl/⌘ + K` search, `N` new household, `Esc` close panels
 - Detail panel quick actions: call, WhatsApp, copy GPS, print
 - "FHH" badge marks female-headed households at a glance
+
+---
+
+## Shared team mode
+
+Two enumerators on two phones, one supervisor at a laptop: the same records,
+without emailing JSON files around. Nothing about the offline workflow changes —
+the device is still the source of truth while you type.
+
+| Piece | Host | Why |
+|---|---|---|
+| Frontend (`index.html`, `app.js`, `js/`) | **GitHub Pages** | free static hosting, HTTPS by default |
+| API + secrets (`server/`) | **Cloudflare Workers** | `MONGODB_URI`, `JWT_SECRET`, `BOOTSTRAP_TOKEN`, `ALLOWED_ORIGINS` never touch the repo |
+| Records | **MongoDB Atlas** | survives clearing the browser and switching devices |
+
+What you get:
+
+- **Accounts with roles** — `admin` manages the team, `enumerator` adds and edits,
+  `viewer` reads only (no Add button, no form, no delete).
+- **Offline queue** — a save that cannot reach the server is stored on the device
+  and retried; the header pill shows `Offline`, `3 queued`, `Syncing` or `Synced`.
+- **Conflict handling** — if two devices edit the same household, the second one
+  sees a dialog with both timestamps and chooses *Keep server version* or
+  *Keep my version*. Nothing is lost silently.
+- **Soft deletes** — deleting a household syncs as a tombstone, so it disappears
+  on every device instead of coming back on the next pull.
+- **Local-first fallback** — if the API is unreachable, the app keeps working and
+  keeps saving locally. `apiBaseUrl` left empty means "device only", exactly as
+  before.
+
+Setup (~20 minutes, all free tiers): **[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)**.
+Short version:
+
+```bash
+# 1. Atlas: M0 cluster, database user, allow 0.0.0.0/0, copy the SRV string
+# 2. Worker: set secrets, deploy, note the *.workers.dev URL
+cd server && npm install
+npx wrangler secret put MONGODB_URI
+openssl rand -base64 48 | npx wrangler secret put JWT_SECRET
+npx wrangler secret put BOOTSTRAP_TOKEN
+npx wrangler secret put ALLOWED_ORIGINS     # https://lifeemotorola.github.io,http://localhost:8000
+npx wrangler deploy
+# 3. Frontend: put the Worker URL in js/config.js, push to main, Pages deploys
+```
 
 ---
 
@@ -97,6 +157,22 @@ python3 -m http.server 8000
 Internet is needed for map tiles, place search and reverse geocoding. Data entry
 itself (list, form, export, print) works without a connection.
 
+### Point it at your own API
+
+Edit `js/config.js`:
+
+```js
+window.LOCATOR_CONFIG = {
+    apiBaseUrl: 'https://liberia-locator-api.<subdomain>.workers.dev',
+    appName: 'Liberia Community Locator',
+    syncIntervalSeconds: 60
+};
+```
+
+Leaving `apiBaseUrl` empty keeps the app purely local. Per device, the same
+setting can be changed without touching the file — the account button opens a
+form that stores it in `localStorage['liberiaLocator.apiBaseUrl']`.
+
 ### Optional: pre-cache tiles for offline field days
 Open the area you need at the zoom levels you use while still online; the browser
 caches recently viewed tiles. For guaranteed offline maps, host your own tile set
@@ -108,10 +184,22 @@ and change the `street` layer URL in `app.js`.
 
 ```
 .
-├── index.html     # Markup: header, directory, map, form, detail panel, print area
-├── styles.css     # Design system, components, responsive rules, print styles
-├── app.js         # LIBERIA reference data + CommunityLocator class
-├── LICENSE        # MIT
+├── index.html                 # Markup: header, directory, map, form, detail panel, print area
+├── styles.css                 # Design system, components, responsive rules, print styles
+├── app.js                     # LIBERIA reference data + CommunityLocator class
+├── js/
+│   ├── config.js              # Public settings (API URL, sync interval)
+│   ├── api.js                 # Typed fetch client for the Worker API
+│   ├── sync.js                # Offline queue, push/pull, conflict detection
+│   └── auth-ui.js             # Sign-in, setup wizard, account panel, conflict dialog
+├── server/                    # Cloudflare Worker API + MongoDB Atlas (see server/README.md)
+├── test-e2e/                  # jsdom end-to-end tests against a live Worker
+├── docs/
+│   ├── ARCHITECTURE.md        # How the three layers fit together
+│   └── DEPLOYMENT.md          # Atlas → Cloudflare → GitHub Pages runbook
+├── .github/workflows/
+│   └── deploy-pages.yml       # Publishes the static site to GitHub Pages
+├── LICENSE                    # MIT
 └── README.md
 ```
 
@@ -119,7 +207,12 @@ and change the `street` layer URL in `app.js`.
 |---|---|
 | `index.html` | App shell, four-tab household form, data menu, datalists, print container |
 | `styles.css` | CSS variables, layout, components, mobile + print rules |
-| `app.js` | Map, form logic, storage, filters, validation, export/import, printing |
+| `app.js` | Map, form logic, storage, filters, validation, export/import, printing, role gating |
+| `js/config.js` | `apiBaseUrl` (empty = local only), app name, sync interval |
+| `js/api.js` | Sessions, timeouts, error mapping to messages and field errors |
+| `js/sync.js` | Durable offline queue, push/pull merge rules, conflict reporting |
+| `js/auth-ui.js` | Setup wizard, sign-in, account/password panel, team management |
+| `server/` | Worker routes, auth, validation, Mongo repository, 27 API tests |
 
 ---
 
@@ -224,10 +317,25 @@ Sample record:
 }
 ```
 
-### Backups matter
-`localStorage` is per browser and per device. Clearing browser data, using a
-private window, or switching phones will lose records. Export JSON/CSV at the end
-of every field day.
+### Local storage vs. the shared database
+
+| | Device only (`apiBaseUrl` empty) | Shared team mode |
+|---|---|---|
+| Where records live | `localStorage` on one browser | MongoDB Atlas, cached in `localStorage` |
+| Survives clearing browser data | ❌ | ✅ (sign in and they come back) |
+| Visible to teammates | ❌ | ✅ |
+| Needs internet | No | Only to sync; capture still works offline |
+| Who can edit | Anyone holding the device | Roles: admin, enumerator, viewer |
+
+`localStorage` keys: `liberiaCommunityLocator.v2` (records),
+`liberiaLocator.token` / `.user` (session), `liberiaLocator.queue` (unsent
+changes), `liberiaLocator.syncCursor` (last pull), `liberiaLocator.apiBaseUrl`
+(per-device API address).
+
+In device-only mode, clearing browser data, using a private window or switching
+phones loses records — export JSON/CSV at the end of every field day. In shared
+mode the server is the safety net, but a periodic JSON export is still a good
+habit.
 
 ---
 
@@ -297,12 +405,12 @@ Geolocation requires `https://` or `localhost` and the user's permission.
 
 | Limitation | Notes |
 |---|---|
-| Local-only storage | No sync between devices — export/import JSON to move data |
-| Browser storage cap | Roughly 5 MB per origin; records are small, so thousands fit |
+| Local storage cap | Roughly 5 MB per origin in device-only mode; records are small, so thousands fit |
+| Shared mode needs a backend | GitHub Pages + Cloudflare Worker + MongoDB Atlas; see the deployment runbook |
 | Map tiles need internet | Pre-cache areas or host your own tiles for offline days |
 | Place search needs internet | Nominatim public service; respect its usage policy (no bulk queries) |
 | District lists | Curated for Montserrado only; other counties accept free text |
-| No user accounts | Anyone with the device can read the directory — protect the device |
+| Accounts are optional | Without an API configured anyone holding the device can read the directory — protect the device |
 | Consent | Recorded per household; honour withdrawal requests and delete records |
 
 ---
@@ -316,7 +424,8 @@ Geolocation requires `https://` or `localhost` and the user's permission.
 - [ ] Photo of the structure (compressed, stored locally)
 - [ ] County/district summary report (coverage, WASH and programme indicators)
 - [ ] Curated district lists for all 15 counties
-- [ ] Sync to a shared server when a connection is available
+- [x] Sync to a shared server when a connection is available (Cloudflare Worker + MongoDB Atlas)
+- [ ] Multi-household batch edits and a per-enumerator activity report
 
 ---
 
@@ -324,13 +433,22 @@ Geolocation requires `https://` or `localhost` and the user's permission.
 
 ```bash
 git checkout -b feature/your-change
-# edit index.html / styles.css / app.js
+# edit index.html / styles.css / app.js / js/*.js
 # test on desktop and a phone, online and offline
 git commit -m "feat: describe the change"
 ```
 
-Please keep the app dependency-free (Leaflet + Font Awesome via CDN only) and
-test that old backups still import.
+Please keep the app dependency-free (Leaflet + Font Awesome via CDN only), test
+that old backups still import, and run both suites if you touch the sync path:
+
+```bash
+cd server && npm test                                   # 27 API tests
+cd ../test-e2e && npm install && node frontend-api.e2e.js   # 16 browser checks
+```
+
+Never commit secrets: production values are Cloudflare Worker secrets
+(`npx wrangler secret put …`), local ones go in the gitignored
+`server/.dev.vars`.
 
 ---
 
