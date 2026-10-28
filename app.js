@@ -1888,12 +1888,13 @@ class CommunityLocator {
     }
 
     highlightCard(id) {
-        document.querySelectorAll('.house-card').forEach(c => c.classList.remove('active'));
-        const card = document.querySelector(`.house-card[data-id="${this.cssEscape(id)}"]`);
-        if (card) {
-            card.classList.add('active');
-            card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
+        let match = null;
+        document.querySelectorAll('.house-card').forEach(card => {
+            const active = card.dataset.id === id;
+            card.classList.toggle('active', active);
+            if (active) match = card;
+        });
+        if (match) match.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
     // ─────────────────────────────────────────
@@ -2923,10 +2924,6 @@ class CommunityLocator {
         return String(value ?? '').replace(/[&<>"']/g, ch => ({
             '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
         }[ch]));
-    }
-
-    cssEscape(value) {
-        return String(value).replace(/["\\]/g, '\\$&');
     }
 
     generateId() {
