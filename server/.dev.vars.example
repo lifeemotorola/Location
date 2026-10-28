@@ -1,0 +1,34 @@
+# Copy to .dev.vars for local development (that file is gitignored).
+# Production values are set with: npx wrangler secret put NAME
+# See ../docs/DEPLOYMENT.md for the full runbook.
+
+# Atlas connection string. Leave empty when using ALLOW_MEMORY=true.
+MONGODB_URI=""
+
+# Database name inside the Atlas cluster.
+MONGODB_DB="liberia_locator"
+
+# Session signing key — at least 32 characters. Generate with:
+#   openssl rand -base64 48
+JWT_SECRET="local-dev-only-secret-change-me-0123456789abcdef"
+
+# One-time password for creating the first admin. Generate with:
+#   openssl rand -hex 24
+BOOTSTRAP_TOKEN="local-bootstrap-token"
+
+# Comma separated CORS allowlist (no spaces, no trailing slashes).
+ALLOWED_ORIGINS="http://localhost:8000,http://127.0.0.1:8000"
+
+# Session lifetime in seconds (604800 = 7 days).
+AUTH_TTL_SECONDS="604800"
+
+# PBKDF2 iterations. 100000 keeps sign-in fast enough for the Workers free tier.
+PASSWORD_ITERATIONS="100000"
+
+# Local only: keep every record in the Worker's memory instead of Atlas.
+# Never enable this in production — data disappears when the Worker restarts.
+ALLOW_MEMORY="true"
+
+# Local only: relax the sign-in rate limit so the E2E suite can run repeatedly.
+# Leave unset in production (the default is 10 attempts per 10 minutes).
+LOGIN_RATE_LIMIT="200"
