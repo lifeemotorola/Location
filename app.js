@@ -446,6 +446,14 @@ class CommunityLocator {
         this.locateLayer = null;
         this.filters = { county: 'all', district: 'all', status: 'all', street: 'all', search: '' };
 
+        // Backend (optional). When no API is configured the app is local-only.
+        this.api = null;
+        this.sync = null;
+        this.authUI = null;
+        this.session = null;
+        this.needsBootstrap = false;
+        this.lastDetailId = null;
+
         this.init();
     }
 
@@ -463,11 +471,250 @@ class CommunityLocator {
         this.populateFilters();
         this.updateStorageNote();
         this.updateOnlineStatus();
+        this.initCloud();
 
         // Returning users should see their records, not an empty Monrovia
         if (this.households.length > 0) {
             setTimeout(() => this.fitAll(), 500);
         }
+    }
+
+    // ─────────────────────────────────────────
+    // BACKEND BOOTSTRAP (accounts + sync)
+    // ─────────────────────────────────────────
+
+    attachApi() {
+        const config = window.LOCATOR_CONFIG || {};
+        this.api = (window.LocatorApi || { fromConfig: () => null }).fromConfig(config);
+
+        if (!this.api?.isConfigured || !window.SyncEngine) {
+            this.sync = null;
+            return;
+        }
+
+        this.sync?.stop();
+        this.sync = new window.SyncEngine(this.api, {
+            store: window.localStorage,
+            intervalSeconds: Number(config.syncIntervalSeconds) || 60,
+            onStatus: (status) => this.onSyncStatus(status),
+            onRecords: (records) => this.applyServerRecords(records),
+            onConflict: (conflict) => this.onSyncConflict(conflict)
+        });
+    }
+
+    async initCloud() {
+        this.attachApi();
+
+        if (!this.api?.isConfigured || !window.AuthUI) {
+            this.applyPermissions();
+            this.showLocalOnlyHint();
+            return;
+        }
+
+        this.authUI = new window.AuthUI(this);
+
+        try {
+            const status = await this.api.setupStatus();
+            this.needsBootstrap = status.needsBootstrap === true;
+        } catch (error) {
+            console.warn('Could not read setup status', error);
+            this.showToast('Cannot reach the server. Working offline — records still save here.', 'warning');
+        }
+
+        await this.authUI.mount();
+
+        if (this.api.token) {
+            this.session = this.api.user;
+            this.applyPermissions();
+            await this.afterSignIn();
+        } else if (this.needsBootstrap) {
+            this.authUI.open('setup');
+        } else {
+            this.applyPermissions();
+        }
+    }
+
+    showLocalOnlyHint() {
+        const note = document.getElementById('storageNote');
+        if (note && !this.api?.isConfigured) {
+            note.innerHTML = '<i class="fas fa-hard-drive" aria-hidden="true"></i> '
+                + 'Saved on this device · <button type="button" class="link-btn" id="connectApiBtn">Connect API</button>';
+            document.getElementById('connectApiBtn')?.addEventListener('click', () => {
+                if (this.authUI) {
+                    this.authUI.open('config');
+                } else {
+                    window.alert('Set apiBaseUrl in js/config.js to use the shared backend.');
+                }
+            });
+        }
+    }
+
+    onSyncStatus(status) {
+        if (status.state === 'offline') {
+            this.showToastOnce('offline-sync', 'Offline — changes are queued on this device.', 'warning');
+        }
+        this.authUI?.refresh();
+    }
+
+    showToastOnce(key, message, type) {
+        this._toastKeys = this._toastKeys || new Set();
+        if (this._toastKeys.has(key)) return;
+        this._toastKeys.add(key);
+        setTimeout(() => this._toastKeys.delete(key), 60000);
+        this.showToast(message, type);
+    }
+
+    onSessionChange(user) {
+        this.session = user || null;
+        this.applyPermissions();
+        this.authUI?.refresh();
+    }
+
+    async afterSignIn() {
+        if (!this.sync) return;
+
+        try {
+            await this.sync.flush();
+            await this.sync.pull({ full: !this.sync.cursor });
+            this.sync.start();
+        } catch (error) {
+            console.warn('Initial sync failed', error);
+            this.showToast('Signed in, but sync failed. Your work is queued.', 'warning');
+        }
+
+        this.authUI?.refresh();
+    }
+
+    // ─────────────────────────────────────────
+    // ROLE-BASED UI
+    // ─────────────────────────────────────────
+
+    canWrite() {
+        if (!this.session) return true; // local-only mode
+        return ['admin', 'enumerator'].includes(this.session.role);
+    }
+
+    isViewer() {
+        return Boolean(this.session) && this.session.role === 'viewer';
+    }
+
+    applyPermissions() {
+        const writable = this.canWrite();
+
+        const addBtn = document.getElementById('addHouseBtn');
+        if (addBtn) {
+            addBtn.hidden = !writable;
+            addBtn.disabled = !writable;
+        }
+
+        document.querySelectorAll('[data-cmd="clear"], [data-cmd="demo"], [data-cmd="import-json"]')
+            .forEach(button => { button.hidden = !writable; });
+
+        const actions = document.querySelector('.detail-actions');
+        if (actions) actions.hidden = !writable;
+
+        this.renderHouseholds(this.getFilteredHouseholds());
+        if (this.lastDetailId) this.showDetail(this.lastDetailId);
+    }
+
+    // ─────────────────────────────────────────
+    // SERVER RECORDS → LOCAL CACHE
+    // ─────────────────────────────────────────
+
+    applyServerRecords(records) {
+        if (!Array.isArray(records) || records.length === 0) return;
+
+        const byId = new Map(this.households.map(household => [household.id, household]));
+        const queuedIds = new Set((this.sync?.queue || []).map(item => item.id));
+        let changed = false;
+
+        records.forEach(server => {
+            if (!server?.id) return;
+
+            if (server.deleted) {
+                if (byId.delete(server.id)) changed = true;
+                return;
+            }
+
+            const local = byId.get(server.id);
+            if (!local) {
+                byId.set(server.id, server);
+                changed = true;
+                return;
+            }
+
+            // Never overwrite an edit that has not been uploaded yet
+            if (queuedIds.has(server.id)) return;
+
+            const localTime = new Date(local.updatedAt || 0).getTime();
+            const serverTime = new Date(server.updatedAt || 0).getTime();
+
+            if (!Number.isFinite(localTime) || serverTime >= localTime) {
+                byId.set(server.id, server);
+                changed = true;
+            }
+        });
+
+        if (!changed) return;
+
+        this.households = [...byId.values()];
+        this.saveToStorage();
+        this.renderAfterDataChange();
+    }
+
+    applyServerRecord(record) {
+        if (!record?.id) return;
+        const index = this.households.findIndex(household => household.id === record.id);
+
+        if (record.deleted) {
+            this.households = this.households.filter(household => household.id !== record.id);
+        } else if (index === -1) {
+            this.households.push(record);
+        } else {
+            this.households[index] = record;
+        }
+
+        this.saveToStorage();
+        this.renderAfterDataChange();
+        if (this.lastDetailId === record.id && !record.deleted) this.showDetail(record.id);
+    }
+
+    onSyncConflict(conflict) {
+        if (this.authUI) {
+            this.authUI.showConflict(conflict);
+        } else {
+            console.warn('Sync conflict without UI', conflict);
+        }
+    }
+
+    /**
+     * "Keep my version": re-queue the local copy on top of the server revision.
+     */
+    forceSaveMine(conflict) {
+        const mine = conflict.mine;
+        if (!mine?.id) return;
+
+        const rebased = {
+            ...mine,
+            updatedAt: new Date(Date.now() + 1000).toISOString(),
+            baseUpdatedAt: conflict.theirs?.updatedAt
+        };
+
+        const index = this.households.findIndex(household => household.id === mine.id);
+        if (index !== -1) this.households[index] = rebased;
+
+        this.saveToStorage();
+        this.sync?.save(rebased);
+        this.renderAfterDataChange();
+        this.showToast('Your version queued for upload.', 'success');
+    }
+
+    renderAfterDataChange() {
+        this.renderAllMarkers();
+        this.updateStats();
+        this.populateFilters();
+        this.applyFilters();
+        this.updateStorageNote();
     }
 
     updateOnlineStatus() {
@@ -1015,6 +1262,11 @@ class CommunityLocator {
     // MODAL
     // ─────────────────────────────────────────
     openModal(household = null, lat = null, lng = null) {
+        if (!this.canWrite()) {
+            this.showToast('Your account is read-only. Ask an admin for enumerator access.', 'error');
+            return;
+        }
+
         this.resetForm();
         this.switchTab('house');
 
@@ -1470,6 +1722,11 @@ class CommunityLocator {
     // SAVE
     // ─────────────────────────────────────────
     saveHousehold() {
+        if (!this.canWrite()) {
+            this.showToast('Your account is read-only. Ask an admin for enumerator access.', 'error');
+            return;
+        }
+
         const lat = parseFloat(document.getElementById('latitude').value);
         const lng = parseFloat(document.getElementById('longitude').value);
 
@@ -1660,6 +1917,7 @@ class CommunityLocator {
         }
 
         this.saveToStorage();
+        this.sync?.save(household);
         this.renderHouseholds();
         this.renderAllMarkers();
         this.updateStats();
@@ -1679,6 +1937,11 @@ class CommunityLocator {
     // DELETE
     // ─────────────────────────────────────────
     deleteHousehold(id) {
+        if (!this.canWrite()) {
+            this.showToast('Your account is read-only. Ask an admin for enumerator access.', 'error');
+            return;
+        }
+
         const h = this.households.find(x => x.id === id);
         if (!h) return;
 
@@ -1690,8 +1953,10 @@ class CommunityLocator {
             delete this.markers[id];
         }
 
+        const deletedAt = new Date().toISOString();
         this.households = this.households.filter(x => x.id !== id);
         this.saveToStorage();
+        this.sync?.remove(id, { deletedAt });
         this.renderHouseholds();
         this.updateStats();
         this.populateFilters();
@@ -1904,6 +2169,8 @@ class CommunityLocator {
         const h = this.households.find(x => x.id === id);
         if (!h) return;
 
+        this.lastDetailId = id;
+
         const color = STATUS_COLORS[h.houseStatus] || '#4F46E5';
         const place = [h.community, h.district, h.county ? `${h.county} County` : '']
             .filter(Boolean).join(', ');
@@ -2104,6 +2371,16 @@ class CommunityLocator {
         }
         actions.innerHTML = '';
 
+        if (!this.canWrite()) {
+            actions.hidden = true;
+            this.map.closePopup();
+            document.getElementById('detailPanel').classList.add('active');
+            this.highlightCard(id);
+            return;
+        }
+
+        actions.hidden = false;
+
         const editBtn = document.createElement('button');
         editBtn.type = 'button';
         editBtn.className = 'btn btn-primary-dark';
@@ -2158,6 +2435,7 @@ class CommunityLocator {
 
     closeDetailPanel() {
         document.getElementById('detailPanel').classList.remove('active');
+        this.lastDetailId = null;
     }
 
     // ─────────────────────────────────────────
@@ -2640,6 +2918,7 @@ class CommunityLocator {
 
         this.households = [];
         this.saveToStorage();
+        this.sync?.reset();
         this.renderHouseholds();
         this.renderAllMarkers();
         this.updateStats();
@@ -3051,9 +3330,11 @@ class CommunityLocator {
 // ---------------------------------------------
 let app;
 
-document.addEventListener('DOMContentLoaded', () => {
+function boot() {
+    if (app) return; // already started (script injected twice, or DOM + load both fired)
+
     const panel = document.getElementById('detailPanel');
-    if (!panel.querySelector('.detail-actions')) {
+    if (panel && !panel.querySelector('.detail-actions')) {
         const actionsDiv = document.createElement('div');
         actionsDiv.className = 'detail-actions';
         panel.appendChild(actionsDiv);
@@ -3061,4 +3342,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     app = new CommunityLocator();
     console.log('✅ Liberia Community Locator ready.');
-});
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot, { once: true });
+} else {
+    boot();
+}

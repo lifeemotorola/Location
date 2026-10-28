@@ -1,0 +1,8 @@
+{
+  "name": "liberia-locator-e2e",
+  "private": true,
+  "description": "End-to-end tests: jsdom frontend against the live Worker API",
+  "devDependencies": {
+    "jsdom": "^30.1.3"
+  }
+}

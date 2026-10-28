@@ -93,6 +93,16 @@
                 <input type="file" id="importFile" accept="application/json,.json" hidden>
             </div>
 
+            <button type="button" class="sync-pill local" id="syncPill" hidden
+                    aria-live="polite" title="Sync status">
+                <i class="fas fa-hard-drive" aria-hidden="true"></i><span>This device</span>
+            </button>
+
+            <button type="button" class="btn btn-ghost" id="accountBtn" aria-haspopup="dialog">
+                <i class="fas fa-user-circle" aria-hidden="true"></i>
+                <span id="accountLabel">Local only</span>
+            </button>
+
             <button class="btn btn-primary" id="addHouseBtn">
                 <i class="fas fa-plus" aria-hidden="true"></i> Add Household
             </button>
@@ -848,11 +858,33 @@
         </div>
     </noscript>
 
+    <!-- ========== ACCOUNT / SIGN-IN MODAL ========== -->
+    <div class="modal-overlay" id="accountOverlay">
+        <div class="modal account-modal" id="accountModal" role="dialog" aria-modal="true" aria-labelledby="accountTitle">
+            <div class="modal-header">
+                <h2 id="accountTitle"><i class="fas fa-user-shield" aria-hidden="true"></i> Account</h2>
+                <button type="button" class="modal-close" data-close-account aria-label="Close account panel">&times;</button>
+            </div>
+            <div class="account-body" id="accountBody"></div>
+        </div>
+    </div>
+
+    <!-- ========== SYNC CONFLICT DIALOG ========== -->
+    <div class="conflict-overlay" id="conflictDialog"></div>
+
     <!-- ========== TOAST ========== -->
     <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Site configuration + backend client -->
+    <script src="js/config.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/sync.js"></script>
+    <script src="js/auth-ui.js"></script>
+
+    <!-- App -->
     <script src="app.js"></script>
 </body>
 </html>

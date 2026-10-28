@@ -1,0 +1,30 @@
+# Cloudflare Worker configuration for the Liberia Community Locator API.
+# Secrets (MONGODB_URI, JWT_SECRET, BOOTSTRAP_TOKEN, ALLOWED_ORIGINS) are set with
+#   npx wrangler secret put NAME
+# and are never stored in this file.
+
+name = "liberia-locator-api"
+main = "src/index.js"
+compatibility_date = "2026-10-25"
+compatibility_flags = ["nodejs_compat"]
+upload_source_maps = true
+
+# Non-secret configuration lives here
+[vars]
+MONGODB_DB = "liberia_locator"
+AUTH_TTL_SECONDS = "604800"
+# Local-only switch used by tests; remove or set to "false" in production
+# ALLOW_MEMORY = "false"
+
+[observability]
+enabled = true
+
+[observability.logs]
+head_sampling_rate = 1
+
+# Optional: serve the static frontend from the Worker too.
+# GitHub Pages remains the primary host; this is only a fallback.
+# [assets]
+# directory = "../"
+# binding = "ASSETS"
+# run_worker_first = ["/api/*"]

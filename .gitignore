@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Local secrets — production values live in Cloudflare Worker secrets
+server/.dev.vars
+.dev.vars
+
+# Build + tooling output
+server/dist/
+.wrangler/
+*.log
+
+# OS noise
+.DS_Store
+Thumbs.db

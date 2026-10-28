@@ -1,0 +1,63 @@
+name: Deploy static site to GitHub Pages
+
+# The frontend is plain HTML/CSS/JS — there is nothing to build. This workflow
+# publishes the repository root (minus server/ and test tooling) to Pages.
+#
+# Repository settings required once:
+#   Settings → Pages → Build and deployment → Source: GitHub Actions
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'app.js'
+      - 'styles.css'
+      - 'js/**'
+      - '.github/workflows/deploy-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deployments race; a queued run supersedes an older queued one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assemble the site
+        run: |
+          set -euo pipefail
+          mkdir -p site
+          cp index.html app.js styles.css site/
+          cp -r js site/js
+          # Fail fast if the API address was left as a local placeholder.
+          if grep -q "apiBaseUrl: 'http://localhost" js/config.js; then
+            echo "::error file=js/config.js::apiBaseUrl still points at localhost"
+            exit 1
+          fi
+
+      - name: Sanity-check the JavaScript
+        run: |
+          set -euo pipefail
+          for file in app.js js/*.js; do node --check "$file"; done
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4
